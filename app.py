@@ -126,11 +126,12 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
         # --- Styles ---
         label_str = config['custom_label']
         ls = config['linestyle']
+        lw = config['linewidth']  # <--- NEW: Line Width
         mk = config['marker']
         ms = config['marker_size']
         color = config['color']
         capsize = config['capsize']
-        err_style = config['error_style']  # Bar or Sleeve
+        err_style = config['error_style']
         sleeve_alpha = config['sleeve_alpha']
 
         if config['marker_fill'] == 'Hollow':
@@ -145,21 +146,16 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
         # 1. Plot Error (Sleeve or Bar) - HIDDEN FROM LEGEND
         if has_error:
             if err_style == "Sleeve":
-                # SLEEVE LOGIC
                 y_lower = y_raw - y_err
                 y_upper = y_raw + y_err
 
                 if config['smoothing']:
-                    # Smooth the boundaries too!
                     sort_idx = np.argsort(x_raw)
                     x_sorted = x_raw[sort_idx]
                     y_l_sorted = y_lower[sort_idx]
                     y_u_sorted = y_upper[sort_idx]
-
                     x_smooth = np.linspace(x_sorted.min(), x_sorted.max(), 300)
                     try:
-                        # We need to spline lower and upper bounds
-                        # Note: assuming monotonic X for spline, or use unique check
                         unique_x, indices = np.unique(x_sorted, return_index=True)
                         if len(unique_x) > 3:
                             spl_l = make_interp_spline(unique_x, y_l_sorted[indices], k=3)
@@ -171,17 +167,12 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
                     except:
                         ax.fill_between(x_raw, y_lower, y_upper, color=color, alpha=sleeve_alpha, linewidth=0)
                 else:
-                    # No smoothing sleeve
                     ax.fill_between(x_raw, y_lower, y_upper, color=color, alpha=sleeve_alpha, linewidth=0)
-
             else:
-                # BAR LOGIC (Standard)
-                ax.errorbar(x_raw, y_raw, yerr=y_err,
-                            fmt='none',
-                            ecolor=color, elinewidth=1.5, capsize=capsize,
+                ax.errorbar(x_raw, y_raw, yerr=y_err, fmt='none', ecolor=color, elinewidth=1.5, capsize=capsize,
                             label=None)
 
-        # 2. Draw Main Data (Smooth or Linear) - HIDDEN FROM LEGEND
+        # 2. Draw Main Data
         if config['smoothing']:
             sort_idx = np.argsort(x_raw)
             x_sorted, y_sorted = x_raw[sort_idx], y_raw[sort_idx]
@@ -198,25 +189,24 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
                 plot_x, plot_y = x_sorted, y_sorted
 
             if ls != "None":
-                ax.plot(plot_x, plot_y, color=color, linestyle=ls, linewidth=2.0, label=None)
+                ax.plot(plot_x, plot_y, color=color, linestyle=ls, linewidth=lw, label=None)  # Using lw
 
             if mk != "None":
                 ax.plot(x_raw, y_raw, linestyle='None', marker=mk, markersize=ms,
                         markeredgecolor=mec, markerfacecolor=mfc, markeredgewidth=2, label=None)
 
         else:
-            # NO SMOOTHING
             final_ls = ls if ls != "None" else "none"
             final_mk = mk if mk != "None" else "none"
-            ax.plot(x_raw, y_raw, color=color, linestyle=final_ls, linewidth=2.0,
+            ax.plot(x_raw, y_raw, color=color, linestyle=final_ls, linewidth=lw,  # Using lw
                     marker=final_mk, markersize=ms,
                     markeredgecolor=mec, markerfacecolor=mfc, markeredgewidth=2,
                     label=None)
 
-        # 3. LEGEND GHOST HANDLE
+        # 3. LEGEND GHOST HANDLE (Must use correct linewidth)
         final_ls_leg = ls if ls != "None" else "None"
         final_mk_leg = mk if mk != "None" else "None"
-        ax.plot([], [], color=color, linestyle=final_ls_leg, linewidth=2.0,
+        ax.plot([], [], color=color, linestyle=final_ls_leg, linewidth=lw,  # Using lw
                 marker=final_mk_leg, markersize=ms,
                 markeredgecolor=mec, markerfacecolor=mfc, markeredgewidth=2,
                 label=label_str)
@@ -235,6 +225,10 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
     ax.set_xlabel(plot_settings['x_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
     ax.set_ylabel(plot_settings['y_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
     ax.tick_params(axis='both', which='major', labelsize=plot_settings['fs_ticks'])
+
+    # --- GRID ---
+    if plot_settings['show_grid']:
+        ax.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
 
     if plot_settings['minor_ticks_x'] > 0:
         ax.xaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_x'] + 1))
@@ -256,8 +250,8 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
 
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Pro Plotter V12", layout="wide")
-st.title("📈 Academic Plotter V12")
+st.set_page_config(page_title="Pro Plotter V13", layout="wide")
+st.title("📈 Academic Plotter")
 
 with st.sidebar:
     st.header("1. Data Input")
@@ -331,10 +325,8 @@ if uploaded_file:
 
                     if error_col != "None":
                         st.caption(f"✅ Linked to: **{error_col}**")
-                        # New: Selector for Style
                         e1, e2 = st.columns(2)
                         err_style = e1.selectbox("Err Style", ["Bar", "Sleeve"], key=f"es_{y_col}")
-
                         if err_style == "Bar":
                             capsize = e2.slider("Cap Size", 0, 10, 4, key=f"cs_{y_col}")
                         else:
@@ -342,7 +334,7 @@ if uploaded_file:
                     else:
                         st.caption("❌ No errors linked")
 
-                    # Colors
+                    # Colors & Lines
                     c1, c2 = st.columns([1, 1])
                     preset_name = c1.selectbox("Color Preset", list(STANDARD_COLORS.keys()),
                                                index=i % len(STANDARD_COLORS), key=f"ps_{y_col}")
@@ -350,7 +342,10 @@ if uploaded_file:
 
                     l1, l2 = st.columns(2)
                     linestyle = l1.selectbox("Line", ["-", "--", "-.", ":", "None"], key=f"ls_{y_col}")
-                    smoothing = l2.checkbox("Smooth", value=False, key=f"sm_{y_col}")
+                    # NEW: Line Width
+                    linewidth = l2.slider("Width", 0.5, 5.0, 2.0, step=0.5, key=f"lw_{y_col}")
+
+                    smoothing = st.checkbox("Smooth", value=False, key=f"sm_{y_col}")
 
                     m1, m2 = st.columns(2)
                     marker_shape = m1.selectbox("Marker", ["None", "Circle", "Square", "Triangle", "Diamond"],
@@ -366,6 +361,7 @@ if uploaded_file:
                         "capsize": capsize,
                         "color": final_color,
                         "linestyle": linestyle,
+                        "linewidth": linewidth,  # Passed to config
                         "smoothing": smoothing,
                         "marker": {"None": "None", "Circle": "o", "Square": "s", "Triangle": "^", "Diamond": "D"}[
                             marker_shape],
@@ -384,8 +380,8 @@ if uploaded_file:
             fs_title = t2.number_input("Title Size", 10, 50, 24)
 
             l1, l2, l3 = st.columns([2, 2, 1])
-            x_lbl = l1.text_input("X Label", r"$\beta$")
-            y_lbl = l2.text_input("Y Label", r"$b_{opt}$")
+            x_lbl = l1.text_input("X Label", r"$y$")
+            y_lbl = l2.text_input("Y Label", r"$x$")
             fs_lbl = l3.number_input("Lbl Size", 10, 50, 36)
 
             tk1, tk2, tk3 = st.columns(3)
@@ -393,6 +389,9 @@ if uploaded_file:
             fs_leg = tk2.number_input("Leg Size", 10, 50, 24)
             leg_pos = tk3.selectbox("Leg Pos", ["best", "upper right", "upper left", "lower right", "None"])
             leg_frame = st.checkbox("Frame", value=False)
+
+            # NEW: Grid
+            show_grid = st.checkbox("Grid", value=False)
 
             mt1, mt2 = st.columns(2)
             min_x = mt1.number_input("Min X Ticks", 0, 10, 0)
@@ -411,7 +410,8 @@ if uploaded_file:
                 "fs_ticks": fs_tick, "fs_legend": fs_leg,
                 "x_lim": x_lim, "y_lim": y_lim, "legend_loc": leg_pos,
                 "legend_frame": leg_frame,
-                "minor_ticks_x": min_x, "minor_ticks_y": min_y
+                "minor_ticks_x": min_x, "minor_ticks_y": min_y,
+                "show_grid": show_grid  # Passed to config
             }
 
         if y_axes:
@@ -424,7 +424,7 @@ if uploaded_file:
 
             buf = BytesIO()
             fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
-            st.download_button("Download PNG", buf.getvalue(), "academic_plot_v12.png", "image/png")
+            st.download_button("Download PNG", buf.getvalue(), "academic_plot_v13.png", "image/png")
         else:
             st.info("Select data to generate plot.")
 else:
