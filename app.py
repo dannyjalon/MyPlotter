@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from io import BytesIO
-from scipy.interpolate import make_interp_spline
+from scipy.interpolate import make_interp_spline, Akima1DInterpolator, PchipInterpolator
 from matplotlib.ticker import AutoMinorLocator
 
 # --- Global Plotting Configuration ---
@@ -126,13 +126,14 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
         # --- Styles ---
         label_str = config['custom_label']
         ls = config['linestyle']
-        lw = config['linewidth']  # <--- NEW: Line Width
+        lw = config['linewidth']
         mk = config['marker']
         ms = config['marker_size']
         color = config['color']
         capsize = config['capsize']
         err_style = config['error_style']
         sleeve_alpha = config['sleeve_alpha']
+        smooth_algo = config['smooth_algo']  # NEW: Algorithm choice
 
         if config['marker_fill'] == 'Hollow':
             mfc = 'white'
@@ -141,31 +142,44 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
             mfc = color
             mec = color
 
+        # --- SMOOTHING FUNCTION ---
+        def get_smooth_curve(x_in, y_in, algo):
+            sort_idx = np.argsort(x_in)
+            x_s = x_in[sort_idx]
+            y_s = y_in[sort_idx]
+            x_new = np.linspace(x_s.min(), x_s.max(), 300)
+
+            try:
+                unique_x, indices = np.unique(x_s, return_index=True)
+                unique_y = y_s[indices]
+                if len(unique_x) > 3:
+                    if algo == "Akima (Tight)":
+                        spl = Akima1DInterpolator(unique_x, unique_y)
+                        return x_new, spl(x_new)
+                    elif algo == "PCHIP (Monotonic)":
+                        spl = PchipInterpolator(unique_x, unique_y)
+                        return x_new, spl(x_new)
+                    else:  # Spline (Rounded)
+                        spl = make_interp_spline(unique_x, unique_y, k=3)
+                        return x_new, spl(x_new)
+                else:
+                    return x_s, y_s
+            except:
+                return x_s, y_s
+
         # --- PLOTTING LOGIC ---
 
-        # 1. Plot Error (Sleeve or Bar) - HIDDEN FROM LEGEND
+        # 1. Plot Error (Sleeve or Bar)
         if has_error:
             if err_style == "Sleeve":
                 y_lower = y_raw - y_err
                 y_upper = y_raw + y_err
 
                 if config['smoothing']:
-                    sort_idx = np.argsort(x_raw)
-                    x_sorted = x_raw[sort_idx]
-                    y_l_sorted = y_lower[sort_idx]
-                    y_u_sorted = y_upper[sort_idx]
-                    x_smooth = np.linspace(x_sorted.min(), x_sorted.max(), 300)
-                    try:
-                        unique_x, indices = np.unique(x_sorted, return_index=True)
-                        if len(unique_x) > 3:
-                            spl_l = make_interp_spline(unique_x, y_l_sorted[indices], k=3)
-                            spl_u = make_interp_spline(unique_x, y_u_sorted[indices], k=3)
-                            ax.fill_between(x_smooth, spl_l(x_smooth), spl_u(x_smooth), color=color, alpha=sleeve_alpha,
-                                            linewidth=0)
-                        else:
-                            ax.fill_between(x_raw, y_lower, y_upper, color=color, alpha=sleeve_alpha, linewidth=0)
-                    except:
-                        ax.fill_between(x_raw, y_lower, y_upper, color=color, alpha=sleeve_alpha, linewidth=0)
+                    # Smooth the sleeve bounds using the SAME algorithm
+                    px_l, py_l = get_smooth_curve(x_raw, y_lower, smooth_algo)
+                    px_u, py_u = get_smooth_curve(x_raw, y_upper, smooth_algo)
+                    ax.fill_between(px_l, py_l, py_u, color=color, alpha=sleeve_alpha, linewidth=0)
                 else:
                     ax.fill_between(x_raw, y_lower, y_upper, color=color, alpha=sleeve_alpha, linewidth=0)
             else:
@@ -174,22 +188,10 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
 
         # 2. Draw Main Data
         if config['smoothing']:
-            sort_idx = np.argsort(x_raw)
-            x_sorted, y_sorted = x_raw[sort_idx], y_raw[sort_idx]
-            x_smooth = np.linspace(x_sorted.min(), x_sorted.max(), 300)
-            try:
-                unique_x, indices = np.unique(x_sorted, return_index=True)
-                unique_y = y_sorted[indices]
-                if len(unique_x) > 3:
-                    spl = make_interp_spline(unique_x, unique_y, k=3)
-                    plot_x, plot_y = x_smooth, spl(x_smooth)
-                else:
-                    plot_x, plot_y = x_sorted, y_sorted
-            except:
-                plot_x, plot_y = x_sorted, y_sorted
+            plot_x, plot_y = get_smooth_curve(x_raw, y_raw, smooth_algo)
 
             if ls != "None":
-                ax.plot(plot_x, plot_y, color=color, linestyle=ls, linewidth=lw, label=None)  # Using lw
+                ax.plot(plot_x, plot_y, color=color, linestyle=ls, linewidth=lw, label=None)
 
             if mk != "None":
                 ax.plot(x_raw, y_raw, linestyle='None', marker=mk, markersize=ms,
@@ -198,15 +200,15 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
         else:
             final_ls = ls if ls != "None" else "none"
             final_mk = mk if mk != "None" else "none"
-            ax.plot(x_raw, y_raw, color=color, linestyle=final_ls, linewidth=lw,  # Using lw
+            ax.plot(x_raw, y_raw, color=color, linestyle=final_ls, linewidth=lw,
                     marker=final_mk, markersize=ms,
                     markeredgecolor=mec, markerfacecolor=mfc, markeredgewidth=2,
                     label=None)
 
-        # 3. LEGEND GHOST HANDLE (Must use correct linewidth)
+        # 3. LEGEND GHOST HANDLE
         final_ls_leg = ls if ls != "None" else "None"
         final_mk_leg = mk if mk != "None" else "None"
-        ax.plot([], [], color=color, linestyle=final_ls_leg, linewidth=lw,  # Using lw
+        ax.plot([], [], color=color, linestyle=final_ls_leg, linewidth=lw,
                 marker=final_mk_leg, markersize=ms,
                 markeredgecolor=mec, markerfacecolor=mfc, markeredgewidth=2,
                 label=label_str)
@@ -226,7 +228,6 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
     ax.set_ylabel(plot_settings['y_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
     ax.tick_params(axis='both', which='major', labelsize=plot_settings['fs_ticks'])
 
-    # --- GRID ---
     if plot_settings['show_grid']:
         ax.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
 
@@ -251,10 +252,10 @@ def create_advanced_plot(df, df_err, x_col, series_configs, plot_settings):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Pro Plotter V13", layout="wide")
-st.title("📈 Academic Plotter")
+st.title("📈 Academic Plotter V13")
 
 with st.sidebar:
-    st.header("1. Data Input")
+    st.header("📁 Data Input")
     uploaded_file = st.file_uploader("Upload Data", type=["xlsx", "csv"])
     uploaded_err = st.file_uploader("Upload Errors", type=["xlsx", "csv"])
 
@@ -303,7 +304,6 @@ if uploaded_file:
                 with st.expander(f"🖌️ {y_col}", expanded=(i == 0)):
                     custom_label = st.text_input("Label", value=y_col, key=f"lbl_{y_col}")
 
-                    # Error Matching
                     err_def_idx = 0
                     if df_err is not None:
                         if y_col in df_err.columns:
@@ -334,7 +334,6 @@ if uploaded_file:
                     else:
                         st.caption("❌ No errors linked")
 
-                    # Colors & Lines
                     c1, c2 = st.columns([1, 1])
                     preset_name = c1.selectbox("Color Preset", list(STANDARD_COLORS.keys()),
                                                index=i % len(STANDARD_COLORS), key=f"ps_{y_col}")
@@ -342,10 +341,16 @@ if uploaded_file:
 
                     l1, l2 = st.columns(2)
                     linestyle = l1.selectbox("Line", ["-", "--", "-.", ":", "None"], key=f"ls_{y_col}")
-                    # NEW: Line Width
                     linewidth = l2.slider("Width", 0.5, 5.0, 2.0, step=0.5, key=f"lw_{y_col}")
 
-                    smoothing = st.checkbox("Smooth", value=False, key=f"sm_{y_col}")
+                    # SMOOTHING SETTINGS
+                    s1, s2 = st.columns([1, 2])
+                    smoothing = s1.checkbox("Smooth", value=False, key=f"sm_{y_col}")
+                    # Selection for Algorithm
+                    smooth_algo = "Spline (Rounded)"
+                    if smoothing:
+                        smooth_algo = s2.selectbox("Algo", ["Spline (Rounded)", "Akima (Tight)", "PCHIP (Monotonic)"],
+                                                   key=f"algo_{y_col}")
 
                     m1, m2 = st.columns(2)
                     marker_shape = m1.selectbox("Marker", ["None", "Circle", "Square", "Triangle", "Diamond"],
@@ -361,8 +366,9 @@ if uploaded_file:
                         "capsize": capsize,
                         "color": final_color,
                         "linestyle": linestyle,
-                        "linewidth": linewidth,  # Passed to config
+                        "linewidth": linewidth,
                         "smoothing": smoothing,
+                        "smooth_algo": smooth_algo,
                         "marker": {"None": "None", "Circle": "o", "Square": "s", "Triangle": "^", "Diamond": "D"}[
                             marker_shape],
                         "marker_fill": marker_fill,
@@ -380,8 +386,8 @@ if uploaded_file:
             fs_title = t2.number_input("Title Size", 10, 50, 24)
 
             l1, l2, l3 = st.columns([2, 2, 1])
-            x_lbl = l1.text_input("X Label", r"$y$")
-            y_lbl = l2.text_input("Y Label", r"$x$")
+            x_lbl = l1.text_input("X Label", r"$\beta$")
+            y_lbl = l2.text_input("Y Label", r"$b_{opt}$")
             fs_lbl = l3.number_input("Lbl Size", 10, 50, 36)
 
             tk1, tk2, tk3 = st.columns(3)
@@ -389,9 +395,7 @@ if uploaded_file:
             fs_leg = tk2.number_input("Leg Size", 10, 50, 24)
             leg_pos = tk3.selectbox("Leg Pos", ["best", "upper right", "upper left", "lower right", "None"])
             leg_frame = st.checkbox("Frame", value=False)
-
-            # NEW: Grid
-            show_grid = st.checkbox("Grid", value=False)
+            show_grid = st.checkbox("Show Grid (Major)", value=False)
 
             mt1, mt2 = st.columns(2)
             min_x = mt1.number_input("Min X Ticks", 0, 10, 0)
@@ -411,7 +415,7 @@ if uploaded_file:
                 "x_lim": x_lim, "y_lim": y_lim, "legend_loc": leg_pos,
                 "legend_frame": leg_frame,
                 "minor_ticks_x": min_x, "minor_ticks_y": min_y,
-                "show_grid": show_grid  # Passed to config
+                "show_grid": show_grid
             }
 
         if y_axes:
