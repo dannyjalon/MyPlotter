@@ -113,6 +113,11 @@ def get_smooth_curve(x_in, y_in, algo):
     except:
         return unique_x, unique_y
 
+# Helper for list/str conversion
+def list_to_str(l): return ",".join(map(str, l)) if l else ""
+def str_to_list(s): return [float(x) for x in s.split(',')] if ',' in s else None
+def def_idx(val, lst): return lst.index(val) if val in lst else 0
+
 # --- Main Plotting Function ---
 def create_advanced_plot(series_list, plot_settings):
     series_list.sort(key=lambda x: x['order'])
@@ -194,11 +199,9 @@ def create_advanced_plot(series_list, plot_settings):
     
     # X Limits & Ticks Logic
     if plot_settings['x_lim']:
-        # Check if user provided 3 numbers: min, step, max
         if len(plot_settings['x_lim']) == 3:
             start, step, end = plot_settings['x_lim']
             ax.set_xlim(start, end)
-            # Create ticks including endpoint
             ticks = np.arange(start, end + step/100, step)
             ax.set_xticks(ticks)
         elif len(plot_settings['x_lim']) == 2:
@@ -231,7 +234,6 @@ def create_advanced_plot(series_list, plot_settings):
         
         if plot_settings['minor_ticks_y'] > 0: ax2.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
 
-    # General Styling
     if plot_settings['title']:
         ax.set_title(plot_settings['title'], fontsize=plot_settings['fs_title'], fontname="Times New Roman", pad=15)
 
@@ -416,7 +418,6 @@ if st.session_state.series_data:
             fs_leg = tk2.number_input("Leg Size", 1, None, st.session_state.loaded_config.get("fs_legend", 12))
             leg_cols = tk3.number_input("Leg Cols", 1, 10, st.session_state.loaded_config.get("legend_cols", 1))
             
-            def_idx(val, lst): return lst.index(val) if val in lst else 0
             l_opts = ["best", "upper right", "upper left", "lower right", "None"]
             lpos = st.selectbox("Leg Pos", l_opts, index=def_idx(st.session_state.loaded_config.get("legend_loc", "best"), l_opts))
             
@@ -424,17 +425,13 @@ if st.session_state.series_data:
             show_grid = gr1.checkbox("Grid", value=st.session_state.loaded_config.get("show_grid", False))
             leg_frame = gr2.checkbox("Leg Frame", value=st.session_state.loaded_config.get("legend_frame", False))
             
-            # --- UPDATED INPUTS FOR STEPS ---
             l1, l2, l3 = st.columns(3)
-            def list_to_str(l): return ",".join(map(str, l)) if l else ""
-            def str_to_list(s): return [float(x) for x in s.split(',')] if ',' in s else None
             
             xlim_in = l1.text_input("X: min, step, max", list_to_str(st.session_state.loaded_config.get("x_lim", None)))
             ylim_in = l2.text_input("Y Left: min, step, max", list_to_str(st.session_state.loaded_config.get("y_lim", None)))
             ylim_r_in = l3.text_input("Y Right: min, step, max", list_to_str(st.session_state.loaded_config.get("y_lim_right", None)))
             
             xlim = str_to_list(xlim_in); ylim = str_to_list(ylim_in); ylim_right = str_to_list(ylim_r_in)
-            
             mt1, mt2 = st.columns(2)
             mx = mt1.number_input("Min X", 0, 10, st.session_state.loaded_config.get("minor_ticks_x", 0))
             my = mt2.number_input("Min Y", 0, 10, st.session_state.loaded_config.get("minor_ticks_y", 0))
@@ -442,8 +439,9 @@ if st.session_state.series_data:
         plot_config = {
             "title": p_title, "fs_title": fs_title, "x_label": x_lab, "y_label": y_lab, "y_label_right": y_lab_r,
             "fs_label": fs_lab, "fs_ticks": fs_tick, "fs_legend": fs_leg,
-            "show_grid": show_grid, "legend_loc": lpos, "legend_frame": leg_frame, "legend_cols": leg_cols,
-            "x_lim": xlim, "y_lim": ylim, "y_lim_right": ylim_right, "minor_ticks_x": mx, "minor_ticks_y": my
+            "show_grid": show_grid, "legend_loc": lpos, "legend_frame": leg_frame,
+            "legend_cols": leg_cols, "x_lim": xlim, "y_lim": ylim, "y_lim_right": ylim_right,
+            "minor_ticks_x": mx, "minor_ticks_y": my
         }
         
         proj_json = get_project_json() 
