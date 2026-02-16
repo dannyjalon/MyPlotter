@@ -10,7 +10,7 @@ from matplotlib.ticker import AutoMinorLocator
 # --- Global Plotting Configuration ---
 plt.rcParams.update({
     "font.family": "serif",
-    "font.serif": ["Times New Roman"],
+    "font.serif": ["Times New Roman"],  # <--- השינוי שביקשת
     "mathtext.fontset": "stix",
     "axes.linewidth": 1.5,
     "xtick.direction": "in",
@@ -116,7 +116,7 @@ def get_smooth_curve(x_in, y_in, algo):
         return unique_x, unique_y
 
 
-# Helper for list/str conversion
+# Helpers
 def list_to_str(l): return ",".join(map(str, l)) if l else ""
 
 
@@ -126,8 +126,15 @@ def str_to_list(s): return [float(x) for x in s.split(',')] if ',' in s else Non
 def def_idx(val, lst): return lst.index(val) if val in lst else 0
 
 
+# Sync color callback (Fixes color picker issue)
+def sync_color(uid):
+    preset_name = st.session_state[f"pst_{uid}"]
+    st.session_state[f"clr_{uid}"] = STANDARD_COLORS[preset_name]
+
+
 # --- Main Plotting Function ---
 def create_advanced_plot(series_list, plot_settings):
+    # Sort by User Order
     series_list.sort(key=lambda x: x['order'])
     fig, ax = plt.subplots(figsize=(12, 8))
 
@@ -167,7 +174,7 @@ def create_advanced_plot(series_list, plot_settings):
         mec = color
 
         if y_err is not None:
-            if len(y_err) == len(x):
+            if len(y_err) == len(x):  # Basic length check
                 if series['error_style'] == "Sleeve":
                     y_lower = y - y_err
                     y_upper = y + y_err
@@ -208,11 +215,11 @@ def create_advanced_plot(series_list, plot_settings):
         lines.append(l)
         labels.append(label)
 
-    # --- Global Axis Settings & Ticks ---
+    # --- Global Axis Settings ---
     ax.set_xlabel(plot_settings['x_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
     ax.set_ylabel(plot_settings['y_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
 
-    # X Limits & Ticks Logic
+    # X Limits
     if plot_settings['x_lim']:
         if len(plot_settings['x_lim']) == 3:
             start, step, end = plot_settings['x_lim']
@@ -222,7 +229,7 @@ def create_advanced_plot(series_list, plot_settings):
         elif len(plot_settings['x_lim']) == 2:
             ax.set_xlim(plot_settings['x_lim'])
 
-    # Y Limits & Ticks Logic (Left)
+    # Y Limits Left
     if plot_settings['y_lim']:
         if len(plot_settings['y_lim']) == 3:
             start, step, end = plot_settings['y_lim']
@@ -232,13 +239,11 @@ def create_advanced_plot(series_list, plot_settings):
         elif len(plot_settings['y_lim']) == 2:
             ax.set_ylim(plot_settings['y_lim'])
 
-    # Secondary Axis Logic
+    # Y Limits Right
     if ax2:
         if plot_settings['y_label_right']:
-            ax2.set_ylabel(plot_settings['y_label_right'], fontsize=plot_settings['fs_label'],
-                           fontname="Times New Roman")
+            ax2.set_ylabel(plot_settings['y_label_right'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
         ax2.tick_params(axis='y', which='major', labelsize=plot_settings['fs_ticks'])
-
         if plot_settings['y_lim_right']:
             if len(plot_settings['y_lim_right']) == 3:
                 start, step, end = plot_settings['y_lim_right']
@@ -247,9 +252,8 @@ def create_advanced_plot(series_list, plot_settings):
                 ax2.set_yticks(ticks)
             elif len(plot_settings['y_lim_right']) == 2:
                 ax2.set_ylim(plot_settings['y_lim_right'])
-
-        if plot_settings['minor_ticks_y'] > 0: ax2.yaxis.set_minor_locator(
-            AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
+        if plot_settings['minor_ticks_y'] > 0:
+            ax2.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
 
     if plot_settings['title']:
         ax.set_title(plot_settings['title'], fontsize=plot_settings['fs_title'], fontname="Times New Roman", pad=15)
@@ -257,13 +261,12 @@ def create_advanced_plot(series_list, plot_settings):
     ax.tick_params(axis='both', which='major', labelsize=plot_settings['fs_ticks'])
     if plot_settings['show_grid']: ax.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
 
-    if plot_settings['minor_ticks_x'] > 0: ax.xaxis.set_minor_locator(
-        AutoMinorLocator(plot_settings['minor_ticks_x'] + 1))
-    if plot_settings['minor_ticks_y'] > 0: ax.yaxis.set_minor_locator(
-        AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
-    if plot_settings['minor_ticks_x'] > 0 or plot_settings['minor_ticks_y'] > 0: ax.tick_params(which='minor',
-                                                                                                direction='in',
-                                                                                                top=True, right=True)
+    if plot_settings['minor_ticks_x'] > 0:
+        ax.xaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_x'] + 1))
+    if plot_settings['minor_ticks_y'] > 0:
+        ax.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
+    if plot_settings['minor_ticks_x'] > 0 or plot_settings['minor_ticks_y'] > 0:
+        ax.tick_params(which='minor', direction='in', top=True, right=True)
 
     if plot_settings['legend_loc'] != "None":
         handles1, labels1 = ax.get_legend_handles_labels()
@@ -281,18 +284,44 @@ def create_advanced_plot(series_list, plot_settings):
     return fig
 
 
-# --- PROJECT SAVING & LOADING LOGIC ---
+# --- PROJECT SAVING LOGIC (Fixed to save Styles) ---
 def get_project_json():
     project = {
         "global_settings": st.session_state.get('loaded_config', {}),
         "series": []
     }
+    # Iterate over series and capture current widget states from session_state
     for s in st.session_state.series_data:
+        uid = s['internal_id']  # Use the Unique ID
+
+        # Capture current styles from widgets or fallback to defaults
+        style_data = {
+            "label": st.session_state.get(f"lbl_{uid}", s.get("y_col_name")),
+            "order": st.session_state.get(f"ord_{uid}", 0),
+            "err_col": st.session_state.get(f"ecn_{uid}", "None"),
+            "err_style": st.session_state.get(f"est_{uid}", "Bar"),
+            "err_cap": st.session_state.get(f"ecs_{uid}", 4),
+            "err_alpha": st.session_state.get(f"esa_{uid}", 0.2),
+            "axis": st.session_state.get(f"ax_{uid}", "Left"),
+            "preset_color": st.session_state.get(f"pst_{uid}", "Blue"),
+            "hex_color": st.session_state.get(f"clr_{uid}", "#0072BD"),
+            "linestyle": st.session_state.get(f"ls_{uid}", "-"),
+            "linewidth": st.session_state.get(f"lw_{uid}", 2.0),
+            "marker": st.session_state.get(f"mk_{uid}", "None"),
+            "fill": st.session_state.get(f"mf_{uid}", "Solid"),
+            "size": st.session_state.get(f"ms_{uid}", 8),
+            "smooth": st.session_state.get(f"sm_{uid}", False),
+            "smooth_algo": st.session_state.get(f"sa_{uid}", "Spline (Rounded)"),
+            "trendline": st.session_state.get(f"tr_{uid}", "None")
+        }
+
         df_main_str = s['df'].to_csv(index=False)
         df_err_str = s['df_err'].to_csv(index=False) if s['df_err'] is not None else None
+
         item = {
             "data_name": s['data_name'], "y_col_name": s['y_col_name'], "x_col_name": s['x_col_name'],
-            "csv_data": df_main_str, "csv_err": df_err_str
+            "csv_data": df_main_str, "csv_err": df_err_str,
+            "style": style_data  # Save the style dict
         }
         project['series'].append(item)
     return json.dumps(project)
@@ -302,8 +331,10 @@ def get_project_json():
 st.set_page_config(page_title="Pro Plotter", layout="wide")
 st.title("📈 Pro Plotter")
 
+# Initialize Session State
 if 'series_data' not in st.session_state: st.session_state.series_data = []
 if 'loaded_config' not in st.session_state: st.session_state.loaded_config = {}
+if 'next_id' not in st.session_state: st.session_state.next_id = 0  # Counter for unique IDs
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -314,15 +345,47 @@ with st.sidebar:
             proj_data = json.load(uploaded_proj)
             st.session_state.loaded_config = proj_data.get('global_settings', {})
             new_series = []
-            for s in proj_data.get('series', []):
+
+            # Reset ID counter based on loaded project to avoid clashes
+            max_id = 0
+
+            for i, s in enumerate(proj_data.get('series', [])):
                 df_main = pd.read_csv(StringIO(s['csv_data']))
                 df_err = pd.read_csv(StringIO(s['csv_err'])) if s['csv_err'] else None
+
+                # Assign a new Unique ID
+                current_uid = i
+                if current_uid >= max_id: max_id = current_uid
+
+                # Inject Styles back into Session State for Widgets
+                style = s.get('style', {})
+                st.session_state[f"lbl_{current_uid}"] = style.get('label', s['y_col_name'])
+                st.session_state[f"ord_{current_uid}"] = style.get('order', i)
+                st.session_state[f"ecn_{current_uid}"] = style.get('err_col', "None")
+                st.session_state[f"est_{current_uid}"] = style.get('err_style', "Bar")
+                st.session_state[f"ecs_{current_uid}"] = style.get('err_cap', 4)
+                st.session_state[f"esa_{current_uid}"] = style.get('err_alpha', 0.2)
+                st.session_state[f"ax_{current_uid}"] = style.get('axis', "Left")
+                st.session_state[f"pst_{current_uid}"] = style.get('preset_color', "Blue")
+                st.session_state[f"clr_{current_uid}"] = style.get('hex_color', "#0072BD")
+                st.session_state[f"ls_{current_uid}"] = style.get('linestyle', "-")
+                st.session_state[f"lw_{current_uid}"] = style.get('linewidth', 2.0)
+                st.session_state[f"mk_{current_uid}"] = style.get('marker', "None")
+                st.session_state[f"mf_{current_uid}"] = style.get('fill', "Solid")
+                st.session_state[f"ms_{current_uid}"] = style.get('size', 8)
+                st.session_state[f"sm_{current_uid}"] = style.get('smooth', False)
+                st.session_state[f"sa_{current_uid}"] = style.get('smooth_algo', "Spline (Rounded)")
+                st.session_state[f"tr_{current_uid}"] = style.get('trendline', "None")
+
                 new_series.append({
-                    "id": len(new_series), "data_name": s['data_name'], "err_name": "Restored",
+                    "internal_id": current_uid,  # Permanent ID
+                    "data_name": s['data_name'], "err_name": "Restored",
                     "df": df_main, "df_err": df_err, "x_col_name": s['x_col_name'], "y_col_name": s['y_col_name']
                 })
+
             st.session_state.series_data = new_series
-            st.success("Project Loaded Successfully!")
+            st.session_state.next_id = max_id + 1  # Continue counting from here
+            st.success("Project Loaded with Styles!")
         except Exception as e:
             st.error(f"Failed to load project: {e}")
 
@@ -366,10 +429,15 @@ with st.sidebar:
                         df_e = pd.read_csv(e_file)
                     else:
                         df_e = pd.read_excel(e_file)
+
                 for y_c in y_cols_select:
+                    # Assign a Unique ID and increment counter
+                    uid = st.session_state.next_id
+                    st.session_state.next_id += 1
+
                     st.session_state.series_data.append({
-                        "id": len(st.session_state.series_data), "data_name": selected_d_name,
-                        "err_name": selected_e_name,
+                        "internal_id": uid,  # Stores the unique key
+                        "data_name": selected_d_name, "err_name": selected_e_name,
                         "df": df_d, "df_err": df_e, "x_col_name": x_col_select, "y_col_name": y_c
                     })
         except Exception as e:
@@ -377,7 +445,20 @@ with st.sidebar:
 
     if st.session_state.series_data:
         st.markdown("---")
-        if st.button("Clear All Data"): st.session_state.series_data = []; st.rerun()
+        # Confirmation for Clear All
+        if st.button("Clear All Data"):
+            st.session_state.confirm_clear = True  # Set flag
+
+        if st.session_state.get('confirm_clear', False):
+            st.warning("Are you sure? This will delete all curves and settings.")
+            col_yes, col_no = st.columns(2)
+            if col_yes.button("Yes, delete everything", type="primary"):
+                st.session_state.series_data = []
+                st.session_state.confirm_clear = False
+                st.rerun()
+            if col_no.button("Cancel"):
+                st.session_state.confirm_clear = False
+                st.rerun()
 
 # --- MAIN AREA ---
 if st.session_state.series_data:
@@ -387,13 +468,20 @@ if st.session_state.series_data:
     with col_left:
         st.subheader("Curve Styling")
         indices_to_remove = []
+
+        # Iterate over series, BUT use the unique 'internal_id' for keys
         for i, series in enumerate(st.session_state.series_data):
+            uid = series['internal_id']  # Use ID, not index 'i'
+
             df = series['df'];
             df_err = series['df_err'];
             y_col_name = series['y_col_name']
+
             with st.expander(f"#{i + 1}: {y_col_name}", expanded=False):
-                custom_label = st.text_input("Label", value=y_col_name, key=f"lbl_{i}")
-                leg_order = st.number_input("Order", value=i, step=1, key=f"ord_{i}")
+                # NOTE: All keys now use 'uid'
+                custom_label = st.text_input("Label", value=y_col_name, key=f"lbl_{uid}")
+                leg_order = st.number_input("Order", value=i, step=1, key=f"ord_{uid}")
+
                 y_err_data = None;
                 est = "Bar";
                 esa = 0.2;
@@ -402,38 +490,48 @@ if st.session_state.series_data:
                     err_cols = ["None"] + df_err.columns.tolist()
                     def_err = 0
                     if y_col_name in df_err.columns: def_err = err_cols.index(y_col_name)
-                    err_col_name = st.selectbox("Error Col", err_cols, index=def_err, key=f"ecn_{i}")
+                    err_col_name = st.selectbox("Error Col", err_cols, index=def_err, key=f"ecn_{uid}")
                     if err_col_name != "None":
                         min_len = min(len(df), len(df_err))
                         y_err_data = df_err[err_col_name].iloc[:min_len].values
                         e1, e2 = st.columns(2)
-                        est = e1.selectbox("Style", ["Bar", "Sleeve"], key=f"est_{i}")
+                        est = e1.selectbox("Style", ["Bar", "Sleeve"], key=f"est_{uid}")
                         if est == "Bar":
-                            ecs = e2.slider("Cap", 0, 10, 4, key=f"ecs_{i}")
+                            ecs = e2.slider("Cap", 0, 10, 4, key=f"ecs_{uid}")
                         else:
-                            esa = e2.slider("Alpha", 0.0, 1.0, 0.2, key=f"esa_{i}")
-                axis_side = st.radio("Axis", ["Left", "Right"], horizontal=True, key=f"ax_{i}")
+                            esa = e2.slider("Alpha", 0.0, 1.0, 0.2, key=f"esa_{uid}")
+
+                axis_side = st.radio("Axis", ["Left", "Right"], horizontal=True, key=f"ax_{uid}")
                 axis_val = "Primary" if axis_side == "Left" else "Secondary"
+
                 c1, c2 = st.columns(2)
+                # Color sync with unique ID
                 preset = c1.selectbox("Color", list(STANDARD_COLORS.keys()), index=i % len(STANDARD_COLORS),
-                                      key=f"pst_{i}")
-                color = c2.color_picker("Hex", STANDARD_COLORS[preset], key=f"clr_{i}")
+                                      key=f"pst_{uid}", on_change=sync_color, args=(uid,))
+                color = c2.color_picker("Hex", STANDARD_COLORS[preset], key=f"clr_{uid}")
+
                 l1, l2 = st.columns(2)
-                ls = l1.selectbox("Line", ["-", "--", "-.", ":", "None"], key=f"ls_{i}")
-                lw = l2.slider("Width", 0.5, 5.0, 2.0, key=f"lw_{i}")
+                ls = l1.selectbox("Line", ["-", "--", "-.", ":", "None"], key=f"ls_{uid}")
+                lw = l2.slider("Width", 0.5, 5.0, 2.0, key=f"lw_{uid}")
+
                 m1, m2, m3 = st.columns(3)
-                mk = m1.selectbox("Marker", ["None", "o", "s", "^", "D"], key=f"mk_{i}")
-                mf = m2.selectbox("Fill", ["Solid", "Hollow"], key=f"mf_{i}")
-                ms = m3.slider("Size", 1, 20, 8, key=f"ms_{i}")
-                sm_check = st.checkbox("Smooth", key=f"sm_{i}")
+                mk = m1.selectbox("Marker", ["None", "o", "s", "^", "D"], key=f"mk_{uid}")
+                mf = m2.selectbox("Fill", ["Solid", "Hollow"], key=f"mf_{uid}")
+                ms = m3.slider("Size", 1, 20, 8, key=f"ms_{uid}")
+
+                sm_check = st.checkbox("Smooth", key=f"sm_{uid}")
                 sm_algo = "Spline (Rounded)"
                 if sm_check: sm_algo = st.selectbox("Algo", ["Spline (Rounded)", "Akima (Tight)", "PCHIP (Monotonic)"],
-                                                    key=f"sa_{i}")
+                                                    key=f"sa_{uid}")
+
                 tr_type = st.selectbox("Trendline",
                                        ["None", "Linear", "Exponential", "Logarithmic", "Power", "Polynomial"],
-                                       key=f"tr_{i}")
+                                       key=f"tr_{uid}")
+
                 st.markdown("---")
-                if st.button(f"🗑️ Remove", key=f"del_{i}"): indices_to_remove.append(i)
+                if st.button(f"🗑️ Remove", key=f"del_{uid}"): indices_to_remove.append(i)
+
+                # Data Processing
                 x_data = df[series['x_col_name']].values;
                 y_data = df[y_col_name].values
                 if y_err_data is not None:
@@ -441,6 +539,7 @@ if st.session_state.series_data:
                     x_data = x_data[:min_l];
                     y_data = y_data[:min_l];
                     y_err_data = y_err_data[:min_l]
+
                 processed_series_list.append({
                     "x_data": x_data, "y_data": y_data, "err_data": y_err_data,
                     "label": custom_label, "order": leg_order, "axis": axis_val,
@@ -449,6 +548,7 @@ if st.session_state.series_data:
                     "smoothing": sm_check, "smooth_algo": sm_algo, "trendline": tr_type, "show_r2": True,
                     "error_style": est, "sleeve_alpha": esa, "capsize": ecs
                 })
+
         if indices_to_remove:
             for idx in sorted(indices_to_remove, reverse=True): st.session_state.series_data.pop(idx)
             st.rerun()
@@ -480,7 +580,6 @@ if st.session_state.series_data:
             leg_frame = gr2.checkbox("Leg Frame", value=st.session_state.loaded_config.get("legend_frame", False))
 
             l1, l2, l3 = st.columns(3)
-
             xlim_in = l1.text_input("X: min, step, max", list_to_str(st.session_state.loaded_config.get("x_lim", None)))
             ylim_in = l2.text_input("Y Left: min, step, max",
                                     list_to_str(st.session_state.loaded_config.get("y_lim", None)))
