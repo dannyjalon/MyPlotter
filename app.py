@@ -10,7 +10,7 @@ from matplotlib.ticker import AutoMinorLocator
 # --- Global Plotting Configuration ---
 plt.rcParams.update({
     "font.family": "serif",
-    "font.serif": ["Times New Roman"],  # <--- השינוי שביקשת
+    "font.serif": ["Times New Roman"],
     "mathtext.fontset": "stix",
     "axes.linewidth": 1.5,
     "xtick.direction": "in",
@@ -126,7 +126,7 @@ def str_to_list(s): return [float(x) for x in s.split(',')] if ',' in s else Non
 def def_idx(val, lst): return lst.index(val) if val in lst else 0
 
 
-# Sync color callback (Fixes color picker issue)
+# Sync color callback
 def sync_color(uid):
     preset_name = st.session_state[f"pst_{uid}"]
     st.session_state[f"clr_{uid}"] = STANDARD_COLORS[preset_name]
@@ -136,7 +136,11 @@ def sync_color(uid):
 def create_advanced_plot(series_list, plot_settings):
     # Sort by User Order
     series_list.sort(key=lambda x: x['order'])
-    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # --- Aspect Ratio Control ---
+    w = plot_settings.get('plot_width', 12)
+    h = plot_settings.get('plot_height', 8)
+    fig, ax = plt.subplots(figsize=(w, h))
 
     ax2 = None
     has_secondary = any(s['axis'] == 'Secondary' for s in series_list)
@@ -219,31 +223,44 @@ def create_advanced_plot(series_list, plot_settings):
     ax.set_xlabel(plot_settings['x_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
     ax.set_ylabel(plot_settings['y_label'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
 
-    # X Limits
+    # --- Log Scale Logic ---
+    if plot_settings.get('x_log', False):
+        ax.set_xscale('log')
+    if plot_settings.get('y_log', False):
+        ax.set_yscale('log')
+
+    # X Limits & Ticks (Only apply manual ticks if NOT log scale)
     if plot_settings['x_lim']:
         if len(plot_settings['x_lim']) == 3:
             start, step, end = plot_settings['x_lim']
             ax.set_xlim(start, end)
-            ticks = np.arange(start, end + step / 100, step)
-            ax.set_xticks(ticks)
+            if not plot_settings.get('x_log', False):
+                ticks = np.arange(start, end + step / 100, step)
+                ax.set_xticks(ticks)
         elif len(plot_settings['x_lim']) == 2:
             ax.set_xlim(plot_settings['x_lim'])
 
-    # Y Limits Left
+    # Y Limits Left & Ticks
     if plot_settings['y_lim']:
         if len(plot_settings['y_lim']) == 3:
             start, step, end = plot_settings['y_lim']
             ax.set_ylim(start, end)
-            ticks = np.arange(start, end + step / 100, step)
-            ax.set_yticks(ticks)
+            if not plot_settings.get('y_log', False):
+                ticks = np.arange(start, end + step / 100, step)
+                ax.set_yticks(ticks)
         elif len(plot_settings['y_lim']) == 2:
             ax.set_ylim(plot_settings['y_lim'])
 
     # Y Limits Right
     if ax2:
         if plot_settings['y_label_right']:
-            ax2.set_ylabel(plot_settings['y_label_right'], fontsize=plot_settings['fs_label'], fontname="Times New Roman")
+            ax2.set_ylabel(plot_settings['y_label_right'], fontsize=plot_settings['fs_label'],
+                           fontname="Times New Roman")
         ax2.tick_params(axis='y', which='major', labelsize=plot_settings['fs_ticks'])
+
+        # Log Scale for Secondary Axis? (Optional - typically follows primary or needs separate setting)
+        # For now, let's keep secondary axis linear unless user requested otherwise (complex logic omitted for simplicity)
+
         if plot_settings['y_lim_right']:
             if len(plot_settings['y_lim_right']) == 3:
                 start, step, end = plot_settings['y_lim_right']
@@ -252,6 +269,7 @@ def create_advanced_plot(series_list, plot_settings):
                 ax2.set_yticks(ticks)
             elif len(plot_settings['y_lim_right']) == 2:
                 ax2.set_ylim(plot_settings['y_lim_right'])
+
         if plot_settings['minor_ticks_y'] > 0:
             ax2.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
 
@@ -259,12 +277,22 @@ def create_advanced_plot(series_list, plot_settings):
         ax.set_title(plot_settings['title'], fontsize=plot_settings['fs_title'], fontname="Times New Roman", pad=15)
 
     ax.tick_params(axis='both', which='major', labelsize=plot_settings['fs_ticks'])
-    if plot_settings['show_grid']: ax.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
 
-    if plot_settings['minor_ticks_x'] > 0:
-        ax.xaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_x'] + 1))
-    if plot_settings['minor_ticks_y'] > 0:
-        ax.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
+    # Log scale often has its own grid logic, but we enforce user preference
+    if plot_settings['show_grid']:
+        ax.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+        if plot_settings.get('x_log', False) or plot_settings.get('y_log', False):
+            ax.grid(True, which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.3)
+
+    # Minor Ticks (Only if linear)
+    if not plot_settings.get('x_log', False):
+        if plot_settings['minor_ticks_x'] > 0:
+            ax.xaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_x'] + 1))
+
+    if not plot_settings.get('y_log', False):
+        if plot_settings['minor_ticks_y'] > 0:
+            ax.yaxis.set_minor_locator(AutoMinorLocator(plot_settings['minor_ticks_y'] + 1))
+
     if plot_settings['minor_ticks_x'] > 0 or plot_settings['minor_ticks_y'] > 0:
         ax.tick_params(which='minor', direction='in', top=True, right=True)
 
@@ -284,7 +312,7 @@ def create_advanced_plot(series_list, plot_settings):
     return fig
 
 
-# --- PROJECT SAVING LOGIC (Fixed to save Styles) ---
+# --- PROJECT SAVING LOGIC ---
 def get_project_json():
     project = {
         "global_settings": st.session_state.get('loaded_config', {}),
@@ -575,6 +603,16 @@ if st.session_state.series_data:
             lpos = st.selectbox("Leg Pos", l_opts,
                                 index=def_idx(st.session_state.loaded_config.get("legend_loc", "best"), l_opts))
 
+            # --- New Aspect Ratio & Log Scale Controls ---
+            c_dim1, c_dim2 = st.columns(2)
+            plot_w = c_dim1.number_input("Plot Width", 1, 30, st.session_state.loaded_config.get("plot_width", 12))
+            plot_h = c_dim2.number_input("Plot Height", 1, 30, st.session_state.loaded_config.get("plot_height", 8))
+
+            c_log1, c_log2 = st.columns(2)
+            log_x = c_log1.checkbox("Log X Axis", value=st.session_state.loaded_config.get("x_log", False))
+            log_y = c_log2.checkbox("Log Y Axis", value=st.session_state.loaded_config.get("y_log", False))
+            # ---------------------------------------------
+
             gr1, gr2 = st.columns(2)
             show_grid = gr1.checkbox("Grid", value=st.session_state.loaded_config.get("show_grid", False))
             leg_frame = gr2.checkbox("Leg Frame", value=st.session_state.loaded_config.get("legend_frame", False))
@@ -598,7 +636,8 @@ if st.session_state.series_data:
             "fs_label": fs_lab, "fs_ticks": fs_tick, "fs_legend": fs_leg,
             "show_grid": show_grid, "legend_loc": lpos, "legend_frame": leg_frame,
             "legend_cols": leg_cols, "x_lim": xlim, "y_lim": ylim, "y_lim_right": ylim_right,
-            "minor_ticks_x": mx, "minor_ticks_y": my
+            "minor_ticks_x": mx, "minor_ticks_y": my,
+            "plot_width": plot_w, "plot_height": plot_h, "x_log": log_x, "y_log": log_y
         }
 
         proj_json = get_project_json()
