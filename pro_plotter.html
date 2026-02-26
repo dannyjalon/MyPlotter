@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Plotter · Scientific Graph Editor</title>
+
+<!-- External Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&family=Source+Code+Pro:wght@400;500&display=swap');
+
+:root {
+  --win-bg:       #ECE9D8;
+  --win-panel:    #D4D0C8;
+  --win-light:    #F5F4EF;
+  --win-mid:      #C0BDB5;
+  --win-dark:     #808080;
+  --origin-teal:  #0D6E8A;
+  --origin-navy:  #1B3A5C;
+  --origin-blue:  #2E75B6;
+  --origin-yellow:#FFCC00;
+  --origin-green: #217346;
+  --origin-red:   #C00000;
+  --text:         #1A1A1A;
+  --text-dim:     #555;
+  --white:        #FFFFFF;
+  --font-ui:      'Source Sans 3','Segoe UI',Tahoma,sans-serif;
+  --font-mono:    'Source Code Pro','Courier New',monospace;
+  --raised: 1px 1px 0 #F5F4EF, -1px -1px 0 #808080, inset 1px 1px 0 #FFF, inset -1px -1px 0 #C0BDB5;
+  --sunken: inset 1px 1px 2px rgba(0,0,0,0.25), inset -1px -1px 0 rgba(255,255,255,0.8);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  background: var(--win-bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── TITLE BAR ── */
+#titlebar {
+  background: linear-gradient(90deg, var(--origin-navy), var(--origin-teal) 55%, #1A8BA8);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-bottom: 2px solid var(--origin-navy);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#titlebar span { opacity: 0.6; font-weight: 400; font-size: 11px; letter-spacing: 0.04em; }
+
+/* ── LAYOUT ── */
+#app {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width: 270px;
+  flex-shrink: 0;
+  background: var(--win-panel);
+  border-right: 2px solid var(--win-dark);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 0 8px 0;
+}
+#sidebar-scroll::-webkit-scrollbar { width: 8px; }
+#sidebar-scroll::-webkit-scrollbar-track { background: var(--win-mid); }
+#sidebar-scroll::-webkit-scrollbar-thumb { background: var(--win-dark); }
+
+.panel-caption {
+  background: linear-gradient(90deg, var(--origin-navy), var(--origin-teal));
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+}
+
+.sidebar-section { padding: 0 8px 8px 8px; }
+.sidebar-section + .sidebar-section { border-top: 1px solid var(--win-dark); padding-top: 8px; }
+
+/* ── MAIN AREA ── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── TABS ── */
+#tab-bar {
+  display: flex;
+  background: var(--win-mid);
+  border-bottom: 2px solid var(--origin-teal);
+  padding: 4px 4px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.tab-btn {
+  background: var(--win-panel);
+  border: 1px solid var(--win-dark);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 4px 14px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.1s;
+}
+.tab-btn:hover { background: var(--win-light); }
+.tab-btn.active {
+  background: var(--win-light);
+  color: var(--origin-navy);
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 -3px 0 var(--origin-yellow) inset;
+}
+
+/* ── TAB PANELS ── */
+.tab-panel { display: none; }
+.tab-panel.active { display: flex; flex: 1; overflow: hidden; }
+
+/* ── CURVE STYLING PANEL ── */
+#panel-curves {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+}
+#curves-list {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--win-panel);
+  border-right: 1px solid var(--win-dark);
+  overflow-y: auto;
+}
+#curves-list::-webkit-scrollbar { width: 8px; }
+#curves-list::-webkit-scrollbar-thumb { background: var(--win-dark); }
+#curve-props {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--win-bg);
+  padding: 10px;
+}
+#curve-props::-webkit-scrollbar { width: 8px; }
+#curve-props::-webkit-scrollbar-thumb { background: var(--win-dark); }
+
+.curve-item {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--win-dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.curve-item:hover { background: var(--win-light); }
+.curve-item.selected { background: var(--origin-navy); color: var(--white); }
+.curve-item .swatch {
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+.curve-item .curve-label { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-item .del-btn {
+  background: none; border: none; cursor: pointer;
+  color: inherit; font-size: 13px; opacity: 0.5; padding: 0 2px;
+}
+.curve-item .del-btn:hover { opacity: 1; color: var(--origin-red); }
+.curve-item.selected .del-btn { color: #faa; }
+
+.no-curves-msg {
+  padding: 16px 10px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── PROPERTY ROWS ── */
+.prop-section {
+  background: var(--origin-teal);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  margin: 8px -10px 6px -10px;
+}
+.prop-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.prop-row label { font-size: 11px; font-weight: 600; color: var(--text-dim); white-space: nowrap; min-width: 80px; }
+.prop-row label.wide { min-width: 120px; }
+
+/* ── INPUTS ── */
+input[type=text], input[type=number], select {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  background: var(--win-light);
+  border: none;
+  border-radius: 0;
+  box-shadow: var(--sunken);
+  color: var(--text);
+  padding: 2px 5px;
+  height: 22px;
+}
+input[type=text]:focus, input[type=number]:focus, select:focus {
+  outline: 2px solid var(--origin-blue);
+}
+select { cursor: pointer; }
+input[type=number] { font-family: var(--font-mono); width: 64px; }
+input[type=text].wide { width: 160px; }
+input[type=text].full { width: 100%; }
+input[type=range] { width: 110px; accent-color: var(--origin-teal); cursor: pointer; }
+input[type=color] {
+  width: 32px; height: 22px;
+  border: none; box-shadow: var(--sunken);
+  padding: 0; cursor: pointer; background: none;
+}
+input[type=checkbox] { accent-color: var(--origin-teal); width: 13px; height: 13px; cursor: pointer; }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--win-panel);
+  color: var(--text);
+  border: none;
+  border-radius: 2px;
+  padding: 3px 12px;
+  height: 26px;
+  box-shadow: var(--raised);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--win-light); }
+.btn:active { box-shadow: var(--sunken); background: var(--win-mid); }
+.btn.primary { background: var(--origin-teal); color: var(--white); box-shadow: var(--raised); }
+.btn.primary:hover { background: #0e7fa0; }
+.btn.danger { color: var(--origin-red); }
+.btn.small { padding: 2px 8px; height: 22px; font-size: 11px; }
+
+/* ── GRAPH SETTINGS PANEL ── */
+#panel-settings {
+  padding: 12px 16px;
+  overflow-y: auto;
+  width: 100%;
+}
+#panel-settings::-webkit-scrollbar { width: 8px; }
+#panel-settings::-webkit-scrollbar-thumb { background: var(--win-dark); }
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.settings-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
+.field-group { display: flex; flex-direction: column; gap: 3px; }
+.field-group label { font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.field-group input, .field-group select { width: 100%; }
+.field-group input[type=number] { width: 100%; }
+
+/* ── GRAPH PANEL ── */
+#panel-graph {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+}
+#canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: white;
+  border: 2px solid var(--win-dark);
+  margin: 8px;
+  box-shadow: var(--sunken);
+}
+#myChart { width: 100% !important; height: 100% !important; }
+#graph-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--win-panel);
+  border-top: 1px solid var(--win-dark);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── STATUS BAR ── */
+#statusbar {
+  background: var(--win-panel);
+  border-top: 1px solid var(--win-dark);
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 3px 10px;
+  box-shadow: 0 -1px 0 rgba(255,255,255,0.5) inset;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+/* ── DROPZONE ── */
+.dropzone {
+  border: 2px dashed var(--win-dark);
+  background: var(--win-light);
+  box-shadow: var(--sunken);
+  padding: 10px 8px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone:hover, .dropzone.drag-over { border-color: var(--origin-teal); background: #e8f4f8; color: var(--origin-teal); }
+.dropzone input { display: none; }
+
+/* ── COLOR PALETTE POPUP ── */
+#color-palette-popup {
+  position: fixed;
+  background: var(--win-light);
+  border: 1px solid var(--win-dark);
+  box-shadow: 3px 3px 8px rgba(0,0,0,0.3);
+  z-index: 9999;
+  min-width: 160px;
+  display: none;
+  padding: 4px 0;
+}
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.palette-item:hover { background: #C8E6C9; }
+.palette-swatch {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+.palette-swatch.white { border-color: #aaa; }
+
+/* ── SECTION HR ── */
+hr.section { border: none; border-top: 1px solid var(--win-dark); border-bottom: 1px solid rgba(255,255,255,0.6); margin: 8px 0; }
+
+/* ── EMPTY STATE ── */
+#empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 10px;
+  color: var(--text-dim);
+  padding: 24px;
+}
+#empty-state .icon { font-size: 3rem; opacity: 0.2; }
+#empty-state h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--origin-navy); }
+#empty-state p { font-size: 11px; text-align: center; }
+
+/* ── COLUMN SELECTOR ── */
+#col-selector { padding: 8px; background: var(--win-bg); border: 1px solid var(--win-dark); margin-top: 6px; display: none; }
+#col-selector label { font-size: 11px; font-weight: 600; color: var(--text-dim); display: block; margin-bottom: 3px; }
+#ycols-list { max-height: 100px; overflow-y: auto; background: var(--win-light); box-shadow: var(--sunken); padding: 4px; }
+.ycol-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px; cursor: pointer; }
+.ycol-item:hover { background: #e0efff; }
+
+/* tooltip hint */
+.hint { font-size: 10px; color: var(--text-dim); font-style: italic; }
+
+/* range value display */
+.range-val { font-family: var(--font-mono); font-size: 11px; min-width: 24px; }
+
+/* scrollbar global */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--win-mid); }
+::-webkit-scrollbar-thumb { background: var(--win-dark); }
+</style>
+</head>
+<body>
+
+<!-- TITLE BAR -->
+<div id="titlebar">
+  📈 PRO PLOTTER <span>· Scientific Graph Editor</span>
+</div>
+
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-scroll">
+
+      <!-- Project Explorer -->
+      <div class="panel-caption">📂 Project Explorer</div>
+      <div class="sidebar-section">
+        <div class="dropzone" id="proj-drop" onclick="document.getElementById('proj-file').click()" title="Load a saved .json project">
+          <input type="file" id="proj-file" accept=".json">
+          📁 Load Project (.json)
+        </div>
+        <button class="btn" style="width:100%;margin-bottom:4px" onclick="saveProject()">💾 Save Project (.json)</button>
+      </div>
+
+      <!-- Import Data -->
+      <div class="sidebar-section">
+        <div class="panel-caption" style="margin:0 -8px 6px -8px">1. Import Data</div>
+        <div class="dropzone" id="data-drop" onclick="document.getElementById('data-file').click()">
+          <input type="file" id="data-file" accept=".csv,.xlsx,.xls" multiple>
+          📊 Drop or click to load data file<br><span class="hint">.csv · .xlsx · .xls</span>
+        </div>
+        <div id="col-selector">
+          <label>X Column</label>
+          <select id="x-col-select" style="width:100%;margin-bottom:6px"></select>
+          <label>Y Columns (click to select)</label>
+          <div id="ycols-list"></div>
+          <button class="btn primary" style="margin-top:6px;width:100%" onclick="addSelectedCurves()">➕ Add Curves</button>
+        </div>
+      </div>
+
+      <!-- Error File -->
+      <div class="sidebar-section">
+        <div class="panel-caption" style="margin:0 -8px 6px -8px">2. Error Data (optional)</div>
+        <div class="dropzone" id="err-drop" onclick="document.getElementById('err-file').click()">
+          <input type="file" id="err-file" accept=".csv,.xlsx,.xls">
+          📉 Drop or click to load error file<br><span class="hint">Same columns as data file</span>
+        </div>
+        <div id="err-status" style="font-size:11px;color:var(--origin-green);padding:0 2px;min-height:16px"></div>
+      </div>
+
+      <!-- Manage Curves -->
+      <div class="sidebar-section" id="manage-section" style="display:none">
+        <div class="panel-caption" style="margin:0 -8px 6px -8px">3. Manage Curves</div>
+        <button class="btn danger" style="width:100%" onclick="clearAllCurves()">🗑️ Clear All Curves</button>
+      </div>
+
+    </div>
+    <!-- Sidebar Status -->
+    <div id="statusbar" id="sidebar-status">Ready — no data loaded</div>
+  </div>
+
+  <!-- MAIN PANEL -->
+  <div id="main">
+
+    <!-- TAB BAR -->
+    <div id="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('curves')">✏️ Curve Styling</button>
+      <button class="tab-btn" onclick="switchTab('settings')">⚙️ Graph Properties</button>
+      <button class="tab-btn active-graph" onclick="switchTab('graph')">📊 Graph Preview</button>
+    </div>
+
+    <!-- TAB: CURVE STYLING -->
+    <div class="tab-panel active" id="tab-curves" style="flex:1;overflow:hidden;display:none">
+      <div id="panel-curves">
+        <div id="curves-list">
+          <div class="panel-caption">Datasets</div>
+          <div id="curves-list-inner">
+            <div class="no-curves-msg">No curves loaded.<br>Import data from the sidebar.</div>
+          </div>
+        </div>
+        <div id="curve-props">
+          <div id="curve-props-inner">
+            <div style="color:var(--text-dim);font-size:11px;font-style:italic;padding:20px">Select a curve to edit its properties.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: GRAPH SETTINGS -->
+    <div class="tab-panel" id="tab-settings" style="display:none">
+      <div id="panel-settings">
+        <div class="prop-section" style="margin:-10px -16px 10px -16px">📐 Axes &amp; Labels</div>
+        <div class="settings-grid" style="margin-bottom:12px">
+          <div class="field-group" style="grid-column:1/3">
+            <label>Graph Title</label>
+            <input type="text" id="s-title" class="full" placeholder="My Graph">
+          </div>
+          <div class="field-group"><label>Title Font Size (pt)</label><input type="number" id="s-fs-title" value="18" min="6" max="72"></div>
+          <div class="field-group"><label>Graph Font</label>
+            <select id="s-font">
+              <option>Times New Roman</option><option>Arial</option><option>Helvetica</option>
+              <option>Georgia</option><option>Verdana</option><option>Courier New</option>
+              <option>Palatino Linotype</option><option>Calibri</option>
+            </select>
+          </div>
+          <div class="field-group"><label>X Axis Label</label><input type="text" id="s-xlabel" value="x"></div>
+          <div class="field-group"><label>Y Axis Label (Left)</label><input type="text" id="s-ylabel" value="y"></div>
+          <div class="field-group"><label>Y Axis Label (Right)</label><input type="text" id="s-ylabel-r" value=""></div>
+          <div class="field-group"><label>Axis Label Font Size</label><input type="number" id="s-fs-label" value="14" min="6" max="48"></div>
+          <div class="field-group"><label>Tick Label Font Size</label><input type="number" id="s-fs-tick" value="12" min="6" max="36"></div>
+          <div class="field-group"><label>Legend Font Size</label><input type="number" id="s-fs-legend" value="12" min="6" max="36"></div>
+          <div class="field-group"><label>Legend Position</label>
+            <select id="s-legend-pos">
+              <option value="top">Top</option><option value="bottom">Bottom</option>
+              <option value="left">Left</option><option value="right">Right</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="field-group"><label>Legend Columns</label><input type="number" id="s-legend-cols" value="1" min="1" max="6"></div>
+        </div>
+
+        <div class="prop-section" style="margin:0 -16px 10px -16px">📏 Scale &amp; Ticks</div>
+        <p class="hint" style="margin-bottom:8px">Enter: min,step,max &nbsp;or&nbsp; min,max &nbsp;(leave blank for auto)</p>
+        <div class="settings-grid triple" style="margin-bottom:12px">
+          <div class="field-group"><label>X Scale (min,step,max)</label><input type="text" id="s-xlim" placeholder="auto"></div>
+          <div class="field-group"><label>Y Left Scale</label><input type="text" id="s-ylim" placeholder="auto"></div>
+          <div class="field-group"><label>Y Right Scale</label><input type="text" id="s-ylim-r" placeholder="auto"></div>
+          <div class="field-group"><label>X Minor Ticks</label><input type="number" id="s-minor-x" value="0" min="0" max="10"></div>
+          <div class="field-group"><label>Y Minor Ticks</label><input type="number" id="s-minor-y" value="0" min="0" max="10"></div>
+          <div class="field-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="s-grid"> Show Grid Lines</label></div>
+        </div>
+
+        <div class="prop-section" style="margin:0 -16px 10px -16px">🖼️ Page Layout</div>
+        <div class="settings-grid triple">
+          <div class="field-group"><label>Width (px)</label><input type="number" id="s-width" value="900" min="200" max="3000"></div>
+          <div class="field-group"><label>Height (px)</label><input type="number" id="s-height" value="600" min="150" max="2000"></div>
+          <div class="field-group"><label>Export DPI (PNG)</label>
+            <select id="s-dpi"><option value="1">72 DPI (screen)</option><option value="1.5">96 DPI</option><option value="2">150 DPI</option><option value="2.77">200 DPI</option><option value="4.17" selected>300 DPI</option><option value="8.33">600 DPI</option></select>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn small" onclick="setSize(900,675)">4:3 (900×675)</button>
+          <button class="btn small" onclick="setSize(960,540)">16:9 (960×540)</button>
+          <button class="btn small" onclick="setSize(700,700)">Square (700×700)</button>
+          <button class="btn small" onclick="setSize(600,900)">Tall (600×900)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: GRAPH PREVIEW -->
+    <div class="tab-panel" id="tab-graph" style="flex:1;overflow:hidden;display:none;flex-direction:column">
+      <div id="panel-graph" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div id="canvas-wrap">
+          <canvas id="myChart"></canvas>
+          <div id="empty-state">
+            <div class="icon">▦</div>
+            <h2>No Worksheet Data Loaded</h2>
+            <p>Import .xlsx or .csv files using the sidebar.<br>Then switch to Curve Styling to configure your series.</p>
+          </div>
+        </div>
+        <div id="graph-toolbar">
+          <button class="btn" onclick="exportPNG()">⬇ Export PNG</button>
+          <button class="btn" onclick="exportSVG()">⬇ Export SVG</button>
+          <button class="btn" onclick="renderChart()">🔄 Refresh Plot</button>
+          <span id="graph-info" style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);margin-left:8px"></span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- COLOR PALETTE POPUP -->
+<div id="color-palette-popup">
+  <div class="palette-item" data-color="#000000"><div class="palette-swatch" style="background:#000"></div>Black</div>
+  <div class="palette-item" data-color="#0000FF"><div class="palette-swatch" style="background:#00F"></div>Blue</div>
+  <div class="palette-item" data-color="#A0522D"><div class="palette-swatch" style="background:#A0522D"></div>Brown</div>
+  <div class="palette-item" data-color="#00FFFF"><div class="palette-swatch" style="background:#0FF;border-color:#aaa"></div>Cyan</div>
+  <div class="palette-item" data-color="#008000"><div class="palette-swatch" style="background:#008000"></div>Green</div>
+  <div class="palette-item" data-color="#FF00FF"><div class="palette-swatch" style="background:#F0F"></div>Magenta</div>
+  <div class="palette-item" data-color="#FF8000"><div class="palette-swatch" style="background:#FF8000"></div>Orange</div>
+  <div class="palette-item" data-color="#800080"><div class="palette-swatch" style="background:#800080"></div>Purple</div>
+  <div class="palette-item" data-color="#FF0000"><div class="palette-swatch" style="background:#F00"></div>Red</div>
+  <div class="palette-item" data-color="#FFFF00"><div class="palette-swatch" style="background:#FF0;border-color:#aaa"></div>Yellow</div>
+  <div class="palette-item" data-color="#FFFFFF"><div class="palette-swatch white" style="background:#FFF"></div>White</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+const ORIGIN_COLORS = ['#000000','#0000FF','#A0522D','#00FFFF','#008000','#FF00FF','#FF8000','#800080','#FF0000','#FFFF00','#FFFFFF'];
+
+let state = {
+  curves: [],        // array of curve objects
+  selectedIdx: -1,
+  dataFiles: {},     // name -> {headers, rows}
+  errorData: null,   // {headers, rows}
+  nextId: 0,
+  chart: null,
+};
+
+// ═══════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const tabs = ['curves','settings','graph'];
+    b.classList.toggle('active', tabs[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.style.display = 'none';
+    p.classList.remove('active');
+  });
+  const panel = document.getElementById('tab-' + name);
+  panel.style.display = name === 'graph' ? 'flex' : (name === 'curves' ? 'flex' : 'block');
+  panel.classList.add('active');
+  if (name === 'graph') { setTimeout(renderChart, 50); }
+}
+
+// init tabs
+document.addEventListener('DOMContentLoaded', () => {
+  switchTab('curves');
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const tabs = ['curves','settings','graph'];
+    b.onclick = () => switchTab(tabs[i]);
+  });
+});
+
+// ═══════════════════════════════════════════════
+//  FILE PARSING
+// ═══════════════════════════════════════════════
+function parseFile(file, cb) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true, dynamicTyping: true,
+      complete: r => cb({ headers: r.meta.fields, rows: r.data, name: file.name })
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const headers = data.length ? Object.keys(data[0]) : [];
+      cb({ headers, rows: data, name: file.name });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// Data file input
+document.getElementById('data-file').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  parseFile(f, parsed => {
+    state.dataFiles[f.name] = parsed;
+    showColSelector(parsed);
+  });
+  e.target.value = '';
+});
+
+// Error file
+document.getElementById('err-file').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  parseFile(f, parsed => {
+    state.errorData = parsed;
+    document.getElementById('err-status').textContent = `✅ Loaded: ${f.name} (${parsed.headers.length} cols)`;
+  });
+  e.target.value = '';
+});
+
+// Drag & drop — data
+setupDrop('data-drop', 'data-file');
+setupDrop('err-drop', 'err-file');
+setupDrop('proj-drop', 'proj-file');
+
+function setupDrop(dropId, inputId) {
+  const zone = document.getElementById(dropId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const inp = document.getElementById(inputId);
+    // trigger via DataTransfer
+    const dt = new DataTransfer(); dt.items.add(f);
+    inp.files = dt.files;
+    inp.dispatchEvent(new Event('change'));
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  COLUMN SELECTOR
+// ═══════════════════════════════════════════════
+let _currentParsed = null;
+function showColSelector(parsed) {
+  _currentParsed = parsed;
+  const sel = document.getElementById('col-selector');
+  sel.style.display = 'block';
+
+  const xSel = document.getElementById('x-col-select');
+  xSel.innerHTML = parsed.headers.map(h => `<option>${h}</option>`).join('');
+  // auto-select 'x' if present
+  const xi = parsed.headers.findIndex(h => h.toLowerCase() === 'x');
+  if (xi >= 0) xSel.selectedIndex = xi;
+
+  renderYColList(parsed.headers, xSel.value);
+  xSel.onchange = () => renderYColList(parsed.headers, xSel.value);
+}
+
+function renderYColList(headers, xcol) {
+  const list = document.getElementById('ycols-list');
+  const ycols = headers.filter(h => h !== xcol);
+  list.innerHTML = ycols.map(h =>
+    `<div class="ycol-item"><input type="checkbox" value="${h}" checked> ${h}</div>`
+  ).join('');
+}
+
+function addSelectedCurves() {
+  if (!_currentParsed) return;
+  const xcol = document.getElementById('x-col-select').value;
+  const checked = [...document.querySelectorAll('#ycols-list input:checked')].map(i => i.value);
+  if (!checked.length) { alert('Select at least one Y column.'); return; }
+
+  checked.forEach(ycol => {
+    const idx = state.curves.length;
+    const color = ORIGIN_COLORS[idx % ORIGIN_COLORS.length];
+    state.curves.push({
+      id: state.nextId++,
+      label: ycol,
+      xcol, ycol,
+      data: _currentParsed,
+      errorData: state.errorData,
+      color,
+      linestyle: 'solid',
+      linewidth: 2,
+      marker: 'none',
+      markerFill: 'solid',
+      markerSize: 5,
+      smooth: false,
+      smoothAlgo: 'spline',
+      trendline: 'none',
+      showR2: true,
+      axis: 'left',
+      errorCol: 'none',
+      errorStyle: 'bar',
+      errorCap: 4,
+      errorAlpha: 0.2,
+      order: idx,
+    });
+  });
+
+  renderCurvesList();
+  if (state.curves.length > 0) selectCurve(state.curves.length - checked.length);
+  updateStatus();
+  document.getElementById('manage-section').style.display = '';
+  document.getElementById('col-selector').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════
+//  CURVES LIST
+// ═══════════════════════════════════════════════
+function renderCurvesList() {
+  const inner = document.getElementById('curves-list-inner');
+  if (!state.curves.length) {
+    inner.innerHTML = '<div class="no-curves-msg">No curves loaded.<br>Import data from the sidebar.</div>';
+    return;
+  }
+  inner.innerHTML = state.curves.map((c, i) => `
+    <div class="curve-item ${i === state.selectedIdx ? 'selected' : ''}" onclick="selectCurve(${i})">
+      <div class="swatch" style="background:${c.color};${c.color==='#FFFFFF'?'border:1px solid #999':''}"></div>
+      <span class="curve-label">${c.label}</span>
+      <button class="del-btn" onclick="deleteCurve(event,${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function selectCurve(idx) {
+  state.selectedIdx = idx;
+  renderCurvesList();
+  renderCurveProps(idx);
+}
+
+function deleteCurve(e, idx) {
+  e.stopPropagation();
+  state.curves.splice(idx, 1);
+  if (state.selectedIdx >= state.curves.length) state.selectedIdx = state.curves.length - 1;
+  renderCurvesList();
+  if (state.selectedIdx >= 0) renderCurveProps(state.selectedIdx);
+  else document.getElementById('curve-props-inner').innerHTML = '<div style="color:var(--text-dim);font-size:11px;font-style:italic;padding:20px">Select a curve to edit its properties.</div>';
+  updateStatus();
+  if (!state.curves.length) document.getElementById('manage-section').style.display = 'none';
+}
+
+function clearAllCurves() {
+  if (!confirm('Delete all curves?')) return;
+  state.curves = []; state.selectedIdx = -1;
+  renderCurvesList();
+  document.getElementById('curve-props-inner').innerHTML = '<div style="color:var(--text-dim);font-size:11px;font-style:italic;padding:20px">Select a curve to edit its properties.</div>';
+  document.getElementById('manage-section').style.display = 'none';
+  updateStatus();
+}
+
+// ═══════════════════════════════════════════════
+//  CURVE PROPERTIES PANEL
+// ═══════════════════════════════════════════════
+function renderCurveProps(idx) {
+  const c = state.curves[idx];
+  const errCols = c.data.headers.filter(h => h !== c.xcol);
+  const errOptions = ['none', ...errCols].map(h =>
+    `<option value="${h}" ${c.errorCol===h?'selected':''}>${h}</option>`
+  ).join('');
+
+  document.getElementById('curve-props-inner').innerHTML = `
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <strong style="font-size:13px">${c.label}</strong>
+        <span style="font-size:11px;color:var(--text-dim)">(Dataset ${idx+1})</span>
+      </div>
+
+      <!-- Label & Order -->
+      <div class="prop-row">
+        <label>Series Label</label>
+        <input type="text" class="wide" value="${c.label}" oninput="updateCurve(${idx},'label',this.value)">
+      </div>
+      <div class="prop-row">
+        <label>Legend Order</label>
+        <input type="number" value="${c.order}" min="0" oninput="updateCurve(${idx},'order',+this.value)">
+      </div>
+
+      <!-- Error -->
+      ${errCols.length ? `
+      <div class="prop-section">⚠ Error Bar</div>
+      <div class="prop-row">
+        <label>Error Column</label>
+        <select onchange="updateCurve(${idx},'errorCol',this.value)">${errOptions}</select>
+      </div>
+      <div class="prop-row" id="errstyle-row-${idx}" style="${c.errorCol==='none'?'display:none':''}">
+        <label>Style</label>
+        <select onchange="updateCurve(${idx},'errorStyle',this.value)">
+          <option value="bar" ${c.errorStyle==='bar'?'selected':''}>Bar</option>
+          <option value="sleeve" ${c.errorStyle==='sleeve'?'selected':''}>Sleeve</option>
+        </select>
+        ${c.errorStyle==='bar' ? `
+        <label>Cap Size</label>
+        <input type="number" value="${c.errorCap}" min="0" max="20" style="width:50px" oninput="updateCurve(${idx},'errorCap',+this.value)">
+        ` : `
+        <label>Opacity</label>
+        <input type="range" min="0" max="1" step="0.05" value="${c.errorAlpha}" oninput="updateCurve(${idx},'errorAlpha',+this.value);this.nextSibling.textContent=this.value">
+        <span class="range-val">${c.errorAlpha}</span>
+        `}
+      </div>
+      ` : ''}
+
+      <!-- Y Axis -->
+      <div class="prop-row" style="margin-top:6px">
+        <label>Y Axis</label>
+        <label style="min-width:0;display:flex;align-items:center;gap:4px"><input type="radio" name="axis-${idx}" value="left" ${c.axis==='left'?'checked':''} onchange="updateCurve(${idx},'axis','left')"> Left</label>
+        <label style="min-width:0;display:flex;align-items:center;gap:4px"><input type="radio" name="axis-${idx}" value="right" ${c.axis==='right'?'checked':''} onchange="updateCurve(${idx},'axis','right')"> Right</label>
+      </div>
+
+      <!-- COLOR -->
+      <div class="prop-section">🎨 Color</div>
+      <div class="prop-row">
+        <label>Quick Pick</label>
+        <button class="btn small" onclick="openColorPalette(event,${idx})" style="display:flex;align-items:center;gap:6px">
+          <span style="display:inline-block;width:14px;height:14px;background:${c.color};border-radius:3px;border:1px solid rgba(0,0,0,0.3)"></span>
+          ${getColorName(c.color)} ▾
+        </button>
+        <label>Custom</label>
+        <input type="color" value="${c.color}" oninput="updateCurve(${idx},'color',this.value)">
+      </div>
+
+      <!-- LINE -->
+      <div class="prop-section">─ Line</div>
+      <div class="prop-row">
+        <label>Style</label>
+        <select onchange="updateCurve(${idx},'linestyle',this.value)">
+          <option value="solid" ${c.linestyle==='solid'?'selected':''}>─── Solid</option>
+          <option value="dashed" ${c.linestyle==='dashed'?'selected':''}>- - - Dashed</option>
+          <option value="dotted" ${c.linestyle==='dotted'?'selected':''}>··· Dotted</option>
+          <option value="dashdot" ${c.linestyle==='dashdot'?'selected':''}>-·- Dash-dot</option>
+          <option value="none" ${c.linestyle==='none'?'selected':''}>None</option>
+        </select>
+        <label>Width</label>
+        <input type="range" min="0.5" max="6" step="0.5" value="${c.linewidth}" oninput="updateCurve(${idx},'linewidth',+this.value);this.nextSibling.textContent=this.value">
+        <span class="range-val">${c.linewidth}</span>
+      </div>
+
+      <!-- MARKER -->
+      <div class="prop-section">● Symbol</div>
+      <div class="prop-row">
+        <label>Shape</label>
+        <select onchange="updateCurve(${idx},'marker',this.value)">
+          <option value="none" ${c.marker==='none'?'selected':''}>None</option>
+          <option value="circle" ${c.marker==='circle'?'selected':''}>● Circle</option>
+          <option value="rect" ${c.marker==='rect'?'selected':''}>■ Square</option>
+          <option value="triangle" ${c.marker==='triangle'?'selected':''}>▲ Triangle</option>
+          <option value="rectRot" ${c.marker==='rectRot'?'selected':''}>◆ Diamond</option>
+          <option value="star" ${c.marker==='star'?'selected':''}>★ Star</option>
+          <option value="cross" ${c.marker==='cross'?'selected':''}>+ Cross</option>
+          <option value="crossRot" ${c.marker==='crossRot'?'selected':''}>✕ X</option>
+        </select>
+      </div>
+      <div class="prop-row">
+        <label>Fill</label>
+        <select onchange="updateCurve(${idx},'markerFill',this.value)">
+          <option value="solid" ${c.markerFill==='solid'?'selected':''}>Solid</option>
+          <option value="hollow" ${c.markerFill==='hollow'?'selected':''}>Hollow</option>
+        </select>
+        <label>Size</label>
+        <input type="range" min="2" max="20" step="1" value="${c.markerSize}" oninput="updateCurve(${idx},'markerSize',+this.value);this.nextSibling.textContent=this.value">
+        <span class="range-val">${c.markerSize}</span>
+      </div>
+
+      <!-- CURVE OPTIONS -->
+      <div class="prop-section">〜 Curve Processing</div>
+      <div class="prop-row">
+        <label style="display:flex;align-items:center;gap:6px;min-width:0">
+          <input type="checkbox" ${c.smooth?'checked':''} onchange="updateCurve(${idx},'smooth',this.checked)"> Smooth Curve
+        </label>
+      </div>
+      ${c.smooth ? `
+      <div class="prop-row">
+        <label>Algorithm</label>
+        <select onchange="updateCurve(${idx},'smoothAlgo',this.value)">
+          <option value="spline" ${c.smoothAlgo==='spline'?'selected':''}>Spline (Rounded)</option>
+          <option value="pchip" ${c.smoothAlgo==='pchip'?'selected':''}>PCHIP (Monotonic)</option>
+          <option value="linear" ${c.smoothAlgo==='linear'?'selected':''}>Linear Segments</option>
+        </select>
+      </div>
+      ` : ''}
+      <div class="prop-row">
+        <label>Regression</label>
+        <select onchange="updateCurve(${idx},'trendline',this.value)">
+          <option value="none" ${c.trendline==='none'?'selected':''}>None</option>
+          <option value="linear" ${c.trendline==='linear'?'selected':''}>Linear</option>
+          <option value="exponential" ${c.trendline==='exponential'?'selected':''}>Exponential</option>
+          <option value="logarithmic" ${c.trendline==='logarithmic'?'selected':''}>Logarithmic</option>
+          <option value="power" ${c.trendline==='power'?'selected':''}>Power</option>
+          <option value="poly2" ${c.trendline==='poly2'?'selected':''}>Polynomial (2nd Order)</option>
+        </select>
+      </div>
+      ${c.trendline !== 'none' ? `
+      <div class="prop-row">
+        <label style="display:flex;align-items:center;gap:6px;min-width:0">
+          <input type="checkbox" ${c.showR2?'checked':''} onchange="updateCurve(${idx},'showR2',this.checked)"> Show R² in legend
+        </label>
+      </div>` : ''}
+
+      <hr class="section" style="margin-top:10px">
+      <button class="btn danger small" onclick="deleteCurve(event,${idx})">✖ Remove this curve</button>
+    </div>
+  `;
+}
+
+function updateCurve(idx, key, val) {
+  state.curves[idx][key] = val;
+  // re-render list swatch if color changed
+  if (key === 'color' || key === 'label') renderCurvesList();
+  // re-render props if smooth/trendline/errorCol changed (shows/hides sub-options)
+  if (['smooth','trendline','errorCol','errorStyle','showR2'].includes(key)) {
+    renderCurveProps(idx);
+    renderCurvesList();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  COLOR PALETTE POPUP
+// ═══════════════════════════════════════════════
+let _colorPaletteIdx = -1;
+function openColorPalette(e, idx) {
+  e.stopPropagation();
+  _colorPaletteIdx = idx;
+  const popup = document.getElementById('color-palette-popup');
+  popup.style.display = 'block';
+  const rect = e.target.getBoundingClientRect();
+  popup.style.left = rect.left + 'px';
+  popup.style.top = (rect.bottom + 2) + 'px';
+}
+document.querySelectorAll('.palette-item').forEach(item => {
+  item.onclick = e => {
+    e.stopPropagation();
+    if (_colorPaletteIdx >= 0) {
+      updateCurve(_colorPaletteIdx, 'color', item.dataset.color);
+      renderCurveProps(_colorPaletteIdx);
+    }
+    document.getElementById('color-palette-popup').style.display = 'none';
+  };
+});
+document.addEventListener('click', () => {
+  document.getElementById('color-palette-popup').style.display = 'none';
+});
+
+function getColorName(hex) {
+  const map = {
+    '#000000':'Black','#0000FF':'Blue','#A0522D':'Brown','#00FFFF':'Cyan',
+    '#008000':'Green','#FF00FF':'Magenta','#FF8000':'Orange','#800080':'Purple',
+    '#FF0000':'Red','#FFFF00':'Yellow','#FFFFFF':'White'
+  };
+  return map[hex.toUpperCase()] || hex;
+}
+
+// ═══════════════════════════════════════════════
+//  MATH HELPERS
+// ═══════════════════════════════════════════════
+function pchipInterp(xs, ys, xNew) {
+  // PCHIP monotonic cubic interpolation
+  const n = xs.length;
+  if (n < 2) return xNew.map(() => ys[0]);
+  const h = [], delta = [];
+  for (let i = 0; i < n-1; i++) { h.push(xs[i+1]-xs[i]); delta.push((ys[i+1]-ys[i])/h[i]); }
+  const d = new Array(n);
+  d[0] = delta[0]; d[n-1] = delta[n-2];
+  for (let i = 1; i < n-1; i++) {
+    if (delta[i-1]*delta[i] <= 0) { d[i] = 0; }
+    else {
+      const w1 = 2*h[i]+h[i-1], w2 = h[i]+2*h[i-1];
+      d[i] = (w1+w2)/(w1/delta[i-1]+w2/delta[i]);
+    }
+  }
+  return xNew.map(x => {
+    let k = 0;
+    for (let i = 0; i < n-1; i++) { if (x >= xs[i]) k = i; }
+    const t = (x - xs[k]) / h[k];
+    return ys[k]*(2*t*t*t-3*t*t+1) + h[k]*d[k]*(t*t*t-2*t*t+t) + ys[k+1]*(-2*t*t*t+3*t*t) + h[k]*d[k+1]*(t*t*t-t*t);
+  });
+}
+
+function catmullRom(xs, ys, npts=300) {
+  if (xs.length < 3) return {x:xs, y:ys};
+  const xOut = [], yOut = [];
+  const n = xs.length;
+  const steps = Math.max(10, Math.floor(npts / (n-1)));
+  for (let i = 0; i < n-1; i++) {
+    const p0 = i > 0 ? i-1 : 0;
+    const p3 = i < n-2 ? i+2 : n-1;
+    for (let t = 0; t < steps; t++) {
+      const s = t / steps;
+      const s2 = s*s, s3 = s2*s;
+      // Catmull-Rom
+      const x = 0.5*((2*xs[i]) + (-xs[p0]+xs[i+1])*s + (2*xs[p0]-5*xs[i]+4*xs[i+1]-xs[p3])*s2 + (-xs[p0]+3*xs[i]-3*xs[i+1]+xs[p3])*s3);
+      const y = 0.5*((2*ys[i]) + (-ys[p0]+ys[i+1])*s + (2*ys[p0]-5*ys[i]+4*ys[i+1]-ys[p3])*s2 + (-ys[p0]+3*ys[i]-3*ys[i+1]+ys[p3])*s3);
+      xOut.push(x); yOut.push(y);
+    }
+  }
+  xOut.push(xs[n-1]); yOut.push(ys[n-1]);
+  return {x:xOut, y:yOut};
+}
+
+function calcTrendline(xArr, yArr, type) {
+  const pairs = xArr.map((x,i) => [x, yArr[i]]).filter(p => isFinite(p[0]) && isFinite(p[1]));
+  pairs.sort((a,b) => a[0]-b[0]);
+  const xs = pairs.map(p=>p[0]), ys = pairs.map(p=>p[1]);
+  const n = xs.length; if (n < 2) return null;
+  const xMin = xs[0], xMax = xs[n-1];
+  const plotX = Array.from({length:200}, (_,i) => xMin + i*(xMax-xMin)/199);
+
+  try {
+    if (type === 'linear') {
+      const {a,b,r2} = linearFit(xs, ys);
+      return { x: plotX, y: plotX.map(x=>a*x+b), label: `y=${a.toFixed(2)}x+${b.toFixed(2)}  R²=${r2.toFixed(3)}` };
+    }
+    if (type === 'exponential') {
+      const pos = pairs.filter(p=>p[1]>0);
+      if (pos.length < 2) return null;
+      const lnY = pos.map(p=>Math.log(p[1]));
+      const {a,b,r2} = linearFit(pos.map(p=>p[0]), lnY);
+      const A = Math.exp(b);
+      return { x: plotX, y: plotX.map(x=>A*Math.exp(a*x)), label: `y=${A.toFixed(2)}e^(${a.toFixed(2)}x)  R²=${r2.toFixed(3)}` };
+    }
+    if (type === 'logarithmic') {
+      const pos = pairs.filter(p=>p[0]>0);
+      if (pos.length < 2) return null;
+      const {a,b,r2} = linearFit(pos.map(p=>Math.log(p[0])), pos.map(p=>p[1]));
+      const plotXp = plotX.filter(x=>x>0);
+      return { x: plotXp, y: plotXp.map(x=>a*Math.log(x)+b), label: `y=${a.toFixed(2)}·ln(x)+${b.toFixed(2)}  R²=${r2.toFixed(3)}` };
+    }
+    if (type === 'power') {
+      const pos = pairs.filter(p=>p[0]>0&&p[1]>0);
+      if (pos.length < 2) return null;
+      const {a,b,r2} = linearFit(pos.map(p=>Math.log(p[0])), pos.map(p=>Math.log(p[1])));
+      const A = Math.exp(b);
+      const plotXp = plotX.filter(x=>x>0);
+      return { x: plotXp, y: plotXp.map(x=>A*Math.pow(x,a)), label: `y=${A.toFixed(2)}x^(${a.toFixed(2)})  R²=${r2.toFixed(3)}` };
+    }
+    if (type === 'poly2') {
+      const coeffs = polyFit2(xs, ys);
+      const yPred = xs.map(x=>coeffs[0]*x*x+coeffs[1]*x+coeffs[2]);
+      const r2 = calcR2(ys, yPred);
+      return { x: plotX, y: plotX.map(x=>coeffs[0]*x*x+coeffs[1]*x+coeffs[2]),
+        label: `y=${coeffs[0].toFixed(2)}x²+${coeffs[1].toFixed(2)}x+${coeffs[2].toFixed(2)}  R²=${r2.toFixed(3)}` };
+    }
+  } catch(e) { return null; }
+  return null;
+}
+
+function linearFit(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+  let num=0, den=0;
+  for (let i=0;i<n;i++) { num+=(xs[i]-mx)*(ys[i]-my); den+=(xs[i]-mx)**2; }
+  const a = num/den, b = my - a*mx;
+  const yPred = xs.map(x=>a*x+b);
+  return {a, b, r2: calcR2(ys, yPred)};
+}
+
+function calcR2(actual, predicted) {
+  const mean = actual.reduce((a,b)=>a+b,0)/actual.length;
+  const ss_tot = actual.reduce((s,y)=>s+(y-mean)**2, 0);
+  const ss_res = actual.reduce((s,y,i)=>s+(y-predicted[i])**2, 0);
+  return 1 - ss_res/ss_tot;
+}
+
+function polyFit2(xs, ys) {
+  // Simple 2nd-order polynomial via normal equations
+  const n = xs.length;
+  let s0=n, s1=0,s2=0,s3=0,s4=0, t0=0,t1=0,t2=0;
+  for (let i=0;i<n;i++) {
+    const x=xs[i],y=ys[i];
+    s1+=x;s2+=x*x;s3+=x*x*x;s4+=x*x*x*x;t0+=y;t1+=x*y;t2+=x*x*y;
+  }
+  // solve [[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]] * [a,b,c] = [t2,t1,t0]
+  const M = [[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]];
+  const T = [t2,t1,t0];
+  return gaussElim(M,T);
+}
+
+function gaussElim(M, T) {
+  const n=3, A=M.map((r,i)=>[...r,T[i]]);
+  for (let c=0;c<n;c++) {
+    let max=c; for(let r=c+1;r<n;r++) if(Math.abs(A[r][c])>Math.abs(A[max][c]))max=r;
+    [A[c],A[max]]=[A[max],A[c]];
+    for(let r=c+1;r<n;r++){const f=A[r][c]/A[c][c];for(let k=c;k<=n;k++)A[r][k]-=f*A[c][k];}
+  }
+  const x=new Array(n);
+  for(let i=n-1;i>=0;i--){x[i]=A[i][n];for(let j=i+1;j<n;j++)x[i]-=A[i][j]*x[j];x[i]/=A[i][i];}
+  return x;
+}
+
+// ═══════════════════════════════════════════════
+//  GET CURVE XY DATA
+// ═══════════════════════════════════════════════
+function getCurveXY(c) {
+  const rows = c.data.rows;
+  const pairs = rows.map(r => [parseFloat(r[c.xcol]), parseFloat(r[c.ycol])])
+    .filter(p => isFinite(p[0]) && isFinite(p[1]));
+  // average duplicate x values
+  const map = {};
+  pairs.forEach(([x,y]) => { if(!map[x]) map[x]={sum:0,n:0}; map[x].sum+=y; map[x].n++; });
+  const merged = Object.keys(map).map(x => [+x, map[x].sum/map[x].n]).sort((a,b)=>a[0]-b[0]);
+  return { x: merged.map(p=>p[0]), y: merged.map(p=>p[1]) };
+}
+
+function getCurveErr(c) {
+  if (!c.errorData || c.errorCol === 'none') return null;
+  const rows = c.errorData.rows;
+  const vals = rows.map(r => parseFloat(r[c.errorCol]));
+  return vals;
+}
+
+// ═══════════════════════════════════════════════
+//  CHART RENDERING
+// ═══════════════════════════════════════════════
+function getSettings() {
+  return {
+    title: document.getElementById('s-title').value,
+    font: document.getElementById('s-font').value,
+    fsTitle: +document.getElementById('s-fs-title').value,
+    xlabel: document.getElementById('s-xlabel').value,
+    ylabel: document.getElementById('s-ylabel').value,
+    ylabelR: document.getElementById('s-ylabel-r').value,
+    fsLabel: +document.getElementById('s-fs-label').value,
+    fsTick: +document.getElementById('s-fs-tick').value,
+    fsLegend: +document.getElementById('s-fs-legend').value,
+    legendPos: document.getElementById('s-legend-pos').value,
+    legendCols: +document.getElementById('s-legend-cols').value,
+    xlim: parseScale(document.getElementById('s-xlim').value),
+    ylim: parseScale(document.getElementById('s-ylim').value),
+    ylimR: parseScale(document.getElementById('s-ylim-r').value),
+    minorX: +document.getElementById('s-minor-x').value,
+    minorY: +document.getElementById('s-minor-y').value,
+    grid: document.getElementById('s-grid').checked,
+    width: +document.getElementById('s-width').value,
+    height: +document.getElementById('s-height').value,
+    dpi: +document.getElementById('s-dpi').value,
+  };
+}
+
+function parseScale(s) {
+  if (!s || !s.trim()) return null;
+  const parts = s.split(',').map(Number);
+  if (parts.some(isNaN)) return null;
+  return parts;
+}
+
+function renderChart() {
+  const canvas = document.getElementById('myChart');
+  const empty = document.getElementById('empty-state');
+  const s = getSettings();
+
+  if (!state.curves.length) {
+    empty.style.display = 'flex';
+    canvas.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  canvas.style.display = 'block';
+
+  // Resize canvas to settings
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width = s.width;
+  canvas.height = s.height;
+
+  const datasets = [];
+  const hasRight = state.curves.some(c => c.axis === 'right');
+
+  // Sort by order
+  const sorted = [...state.curves].sort((a,b) => a.order - b.order);
+
+  for (const c of sorted) {
+    const { x, y } = getCurveXY(c);
+    const errVals = getCurveErr(c);
+    const color = c.color;
+    const borderDash = { solid:[], dashed:[6,4], dotted:[2,4], dashdot:[8,4,2,4], none:[] }[c.linestyle] || [];
+
+    let plotX = x, plotY = y;
+
+    if (c.smooth && x.length > 3) {
+      if (c.smoothAlgo === 'pchip') {
+        const xNew = Array.from({length:300}, (_,i) => x[0] + i*(x[x.length-1]-x[0])/299);
+        plotX = xNew; plotY = pchipInterp(x, y, xNew);
+      } else if (c.smoothAlgo === 'spline') {
+        const res = catmullRom(x, y, 300);
+        plotX = res.x; plotY = res.y;
+      }
+      // linear = keep original
+    }
+
+    const pts = plotX.map((xv,i) => ({x:xv, y:plotY[i]}));
+
+    // Error bars via custom plugin (drawn separately)
+    const fillColor = c.markerFill === 'hollow' ? 'white' : color;
+    const borderColor = color;
+
+    const ds = {
+      label: c.label,
+      data: pts,
+      yAxisID: c.axis === 'right' ? 'y2' : 'y',
+      borderColor: c.linestyle === 'none' ? 'transparent' : color,
+      backgroundColor: fillColor,
+      borderWidth: c.linewidth,
+      borderDash,
+      pointStyle: c.marker === 'none' ? false : c.marker,
+      pointRadius: c.marker === 'none' ? 0 : c.markerSize,
+      pointHoverRadius: c.marker === 'none' ? 0 : c.markerSize + 2,
+      pointBorderColor: borderColor,
+      pointBackgroundColor: fillColor,
+      pointBorderWidth: 1.5,
+      tension: 0,
+      showLine: c.linestyle !== 'none',
+      fill: false,
+      order: c.order,
+      _curveRef: c,
+      _rawX: x, _rawY: y, _errVals: errVals,
+    };
+    datasets.push(ds);
+
+    // Trendline dataset
+    if (c.trendline !== 'none') {
+      const trend = calcTrendline(x, y, c.trendline);
+      if (trend) {
+        const tLabel = c.showR2 ? `[Fit] ${c.label}: ${trend.label}` : `[Fit] ${c.label}`;
+        datasets.push({
+          label: tLabel,
+          data: trend.x.map((xv,i) => ({x:xv, y:trend.y[i]})),
+          yAxisID: c.axis === 'right' ? 'y2' : 'y',
+          borderColor: color,
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [4,4],
+          pointRadius: 0,
+          tension: 0,
+          showLine: true,
+          fill: false,
+          order: c.order + 0.5,
+          _isTrend: true,
+        });
+      }
+    }
+  }
+
+  // Error bar plugin
+  const errorBarPlugin = {
+    id: 'errorBars',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((ds, i) => {
+        if (ds._isTrend) return;
+        const c = ds._curveRef;
+        if (!c || !ds._errVals || c.errorCol === 'none') return;
+        const meta = chart.getDatasetMeta(i);
+        if (meta.hidden) return;
+        const errVals = ds._errVals;
+        const rawX = ds._rawX, rawY = ds._rawY;
+        ctx.save();
+        ctx.strokeStyle = c.color;
+        ctx.lineWidth = 1.5;
+
+        if (c.errorStyle === 'bar') {
+          rawX.forEach((xv, j) => {
+            if (j >= errVals.length) return;
+            const err = errVals[j];
+            if (!isFinite(err)) return;
+            const yAxis = chart.scales[c.axis === 'right' ? 'y2' : 'y'];
+            const xAxis = chart.scales['x'];
+            const px = xAxis.getPixelForValue(xv);
+            const pyTop = yAxis.getPixelForValue(rawY[j] + err);
+            const pyBot = yAxis.getPixelForValue(rawY[j] - err);
+            ctx.beginPath();
+            ctx.moveTo(px, pyTop); ctx.lineTo(px, pyBot);
+            const cap = c.errorCap;
+            ctx.moveTo(px-cap, pyTop); ctx.lineTo(px+cap, pyTop);
+            ctx.moveTo(px-cap, pyBot); ctx.lineTo(px+cap, pyBot);
+            ctx.stroke();
+          });
+        } else {
+          // Sleeve
+          const yAxis = chart.scales[c.axis === 'right' ? 'y2' : 'y'];
+          const xAxis = chart.scales['x'];
+          const pts_top = [], pts_bot = [];
+          rawX.forEach((xv, j) => {
+            if (j >= errVals.length) return;
+            const err = errVals[j];
+            pts_top.push({x: xAxis.getPixelForValue(xv), y: yAxis.getPixelForValue(rawY[j]+err)});
+            pts_bot.push({x: xAxis.getPixelForValue(xv), y: yAxis.getPixelForValue(rawY[j]-err)});
+          });
+          if (pts_top.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(pts_top[0].x, pts_top[0].y);
+            pts_top.forEach(p => ctx.lineTo(p.x, p.y));
+            pts_bot.reverse().forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.closePath();
+            ctx.fillStyle = hexToRgba(c.color, c.errorAlpha);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      });
+    }
+  };
+
+  // Axis scale config
+  function scaleMinMax(lim) {
+    if (!lim) return {};
+    if (lim.length >= 2) return {min:lim[0], max: lim[lim.length-1]};
+    return {};
+  }
+  function scaleTicks(lim, font, fsTick) {
+    const base = { font: {family: s.font, size: fsTick} };
+    if (lim && lim.length === 3) {
+      const [mn,,mx] = lim; const step = lim[1];
+      const arr = [];
+      for (let v=mn; v<=mx+1e-10; v+=step) arr.push(+v.toFixed(10));
+      return {...base, callback: v => arr.includes(+v.toFixed(8)) ? v : '', stepSize: step};
+    }
+    return base;
+  }
+
+  const scalesConfig = {
+    x: {
+      type: 'linear',
+      position: 'bottom',
+      ...scaleMinMax(s.xlim),
+      title: { display: !!s.xlabel, text: s.xlabel, font: {family: s.font, size: s.fsLabel}, color: '#222' },
+      ticks: scaleTicks(s.xlim, s.font, s.fsTick),
+      grid: { display: s.grid, color: 'rgba(100,100,100,0.2)', lineWidth: 0.5 },
+    },
+    y: {
+      type: 'linear',
+      position: 'left',
+      ...scaleMinMax(s.ylim),
+      title: { display: !!s.ylabel, text: s.ylabel, font: {family: s.font, size: s.fsLabel}, color: '#222' },
+      ticks: scaleTicks(s.ylim, s.font, s.fsTick),
+      grid: { display: s.grid, color: 'rgba(100,100,100,0.2)', lineWidth: 0.5 },
+    },
+  };
+  if (hasRight) {
+    scalesConfig.y2 = {
+      type: 'linear',
+      position: 'right',
+      ...scaleMinMax(s.ylimR),
+      title: { display: !!s.ylabelR, text: s.ylabelR, font: {family: s.font, size: s.fsLabel}, color: '#222' },
+      ticks: scaleTicks(s.ylimR, s.font, s.fsTick),
+      grid: { display: false },
+    };
+  }
+
+  const legendCfg = s.legendPos === 'none' ? { display: false } : {
+    display: true,
+    position: s.legendPos,
+    labels: { font: {family: s.font, size: s.fsLegend}, maxWidth: 200,
+      filter: item => !item.text.startsWith('[Fit]') || item.text.includes('R²') },
+    maxWidth: 9999,
+  };
+
+  if (state.chart) { state.chart.destroy(); state.chart = null; }
+
+  state.chart = new Chart(canvas, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: false,
+      animation: false,
+      plugins: {
+        title: { display: !!s.title, text: s.title, font: {family: s.font, size: s.fsTitle, weight:'bold'}, color:'#111', padding:{bottom:12} },
+        legend: legendCfg,
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: (${ctx.parsed.x.toFixed(4)}, ${ctx.parsed.y.toFixed(4)})` } },
+      },
+      scales: scalesConfig,
+      elements: { line: { tension: 0 } },
+    },
+    plugins: [errorBarPlugin],
+  });
+
+  // graph info bar
+  document.getElementById('graph-info').textContent =
+    `${state.curves.length} curve(s)  ·  ${s.width}×${s.height}px  ·  font: ${s.font}`;
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ═══════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════
+function exportPNG() {
+  if (!state.chart) { alert('No chart to export. Go to Graph Preview first.'); return; }
+  const dpi = +document.getElementById('s-dpi').value;
+  const canvas = document.getElementById('myChart');
+  // create higher-res version
+  const w = canvas.width, h = canvas.height;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = w * dpi; offscreen.height = h * dpi;
+  const ctx = offscreen.getContext('2d');
+  ctx.scale(dpi, dpi);
+  ctx.fillStyle = 'white'; ctx.fillRect(0,0,w,h);
+  ctx.drawImage(canvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = 'graph.png';
+  link.href = offscreen.toDataURL('image/png');
+  link.click();
+}
+
+function exportSVG() {
+  if (!state.chart) { alert('No chart to export. Go to Graph Preview first.'); return; }
+  // Build SVG from canvas via blob
+  const canvas = document.getElementById('myChart');
+  const w = canvas.width, h = canvas.height;
+  const img = canvas.toDataURL('image/png');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+  <image href="${img}" width="${w}" height="${h}"/>
+</svg>`;
+  const blob = new Blob([svg], {type:'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = 'graph.svg'; link.href = url; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function setSize(w, h) {
+  document.getElementById('s-width').value = w;
+  document.getElementById('s-height').value = h;
+}
+
+// ═══════════════════════════════════════════════
+//  PROJECT SAVE / LOAD
+// ═══════════════════════════════════════════════
+function saveProject() {
+  const s = getSettings();
+  const project = {
+    version: 1,
+    settings: s,
+    curves: state.curves.map(c => ({
+      id: c.id, label: c.label, xcol: c.xcol, ycol: c.ycol,
+      dataName: c.data.name, errorDataName: c.errorData?.name || null,
+      color: c.color, linestyle: c.linestyle, linewidth: c.linewidth,
+      marker: c.marker, markerFill: c.markerFill, markerSize: c.markerSize,
+      smooth: c.smooth, smoothAlgo: c.smoothAlgo,
+      trendline: c.trendline, showR2: c.showR2,
+      axis: c.axis, errorCol: c.errorCol, errorStyle: c.errorStyle,
+      errorCap: c.errorCap, errorAlpha: c.errorAlpha, order: c.order,
+      // embed data inline
+      csvData: c.data.rows,
+      csvHeaders: c.data.headers,
+      csvErrData: c.errorData ? c.errorData.rows : null,
+      csvErrHeaders: c.errorData ? c.errorData.headers : null,
+    }))
+  };
+  const blob = new Blob([JSON.stringify(project, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.download = 'project.json'; link.href = url; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('proj-file').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const proj = JSON.parse(ev.target.result);
+      loadProject(proj);
+    } catch(err) { alert('Failed to load project: ' + err.message); }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+
+function loadProject(proj) {
+  // restore settings
+  const s = proj.settings || {};
+  if (s.title !== undefined) document.getElementById('s-title').value = s.title;
+  if (s.font) document.getElementById('s-font').value = s.font;
+  if (s.fsTitle) document.getElementById('s-fs-title').value = s.fsTitle;
+  if (s.xlabel) document.getElementById('s-xlabel').value = s.xlabel;
+  if (s.ylabel) document.getElementById('s-ylabel').value = s.ylabel;
+  if (s.ylabelR !== undefined) document.getElementById('s-ylabel-r').value = s.ylabelR;
+  if (s.fsLabel) document.getElementById('s-fs-label').value = s.fsLabel;
+  if (s.fsTick) document.getElementById('s-fs-tick').value = s.fsTick;
+  if (s.fsLegend) document.getElementById('s-fs-legend').value = s.fsLegend;
+  if (s.legendPos) document.getElementById('s-legend-pos').value = s.legendPos;
+  if (s.legendCols) document.getElementById('s-legend-cols').value = s.legendCols;
+  if (s.xlim) document.getElementById('s-xlim').value = s.xlim.join(',');
+  if (s.ylim) document.getElementById('s-ylim').value = s.ylim.join(',');
+  if (s.ylimR) document.getElementById('s-ylim-r').value = s.ylimR.join(',');
+  if (s.minorX !== undefined) document.getElementById('s-minor-x').value = s.minorX;
+  if (s.minorY !== undefined) document.getElementById('s-minor-y').value = s.minorY;
+  if (s.grid !== undefined) document.getElementById('s-grid').checked = s.grid;
+  if (s.width) document.getElementById('s-width').value = s.width;
+  if (s.height) document.getElementById('s-height').value = s.height;
+
+  // restore curves
+  state.curves = [];
+  state.nextId = 0;
+  for (const c of (proj.curves || [])) {
+    const data = { name: c.dataName, headers: c.csvHeaders, rows: c.csvData };
+    const errorData = c.csvErrData ? { name: c.errorDataName, headers: c.csvErrHeaders, rows: c.csvErrData } : null;
+    state.curves.push({ ...c, id: state.nextId++, data, errorData });
+  }
+  state.selectedIdx = state.curves.length > 0 ? 0 : -1;
+  renderCurvesList();
+  if (state.selectedIdx >= 0) renderCurveProps(state.selectedIdx);
+  if (state.curves.length) document.getElementById('manage-section').style.display = '';
+  updateStatus();
+  alert('Project loaded successfully!');
+}
+
+// ═══════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════
+function updateStatus() {
+  const n = state.curves.length;
+  document.getElementById('statusbar').textContent =
+    n === 0 ? 'Ready — no data loaded' : `${n} curve(s) active  ·  Pro Plotter`;
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+window.addEventListener('load', () => {
+  switchTab('curves');
+  // auto-render when switching to graph tab
+});
+</script>
+</body>
+</html>
